@@ -73,8 +73,8 @@ own surfaces, which `setup` wires: the Remote Projects list
   hooks, never touch Zed's files.
 - `ssh-config` is an opt-in gate: nothing under `~/.ssh` is touched until it
   has run. `ssh-config --remove` leaves `~/.ssh/config` byte-identical to
-  before install; `--print` writes nothing (`PICK_NOADOPT`: not even a
-  legacy key dir's adopted id). Other tools' Include lines are
+  before install; `--print` writes nothing (not even a legacy key dir's
+  adopted id: `PICK_NOADOPT`). Other tools' Include lines are
   never touched.
 - `config` is the same kind of gate for Zed's files: `--sync` is a no-op
   until `config` has run (`STATE/settings-installed`), and `--sync` (from
@@ -113,21 +113,28 @@ own surfaces, which `setup` wires: the Remote Projects list
   by `destroy_one`) only when a successful `min ls` no longer lists its id; a
   failed `min ls` keeps everything (ssh-config not rewritten), warns, and
   after a y exits non-zero; `destroy NAME` drops what was kept once a
-  successful `min ls` lists neither the recorded id under NAME nor any box
-  named NAME (or only boxes that took the name since: never those).
+  successful `min ls` no longer lists the recorded id, even while another
+  box holds the name (never touching that box); for a key dir with no id,
+  once no box is named NAME. `min_ls` fails unless its output has a
+  `.sessions` array, so junk on exit 0 is a failed `min ls`, never "no box";
+  `own_filter` fails with its jq, and a box listed under NAME with no
+  usable id (`pick_id` 7) is "no id to trust", never "none".
 - Every min call aimed at one box passes its id, never its name (min 0.8
   resolves a name to whichever box holds it): `session exec` (prepare,
   `_proxy`'s exec, `proxy_command`) and `session destroy` (`destroy_one`).
   The id is `STATE/sessions/NAME/id` (`activate_session`: the one id new in
-  `min ls`, named NAME with `-n`, else for PATH; `prepare` writes it with
-  the facts), checked against `ID_ERE` on every read (`stored_id`, which
+  `min ls`, named NAME with `-n`, else for PATH, a null name refused;
+  `prepare` writes it with the facts, and refuses a bad `id` file or a
+  different id, never writing over either), checked against `ID_ERE` on every read (`stored_id`, which
   also refuses a NAME that is no session name) before it reaches a command
   line or a stanza. `pick_id`/`box_id` resolve NAME: own (the recorded id,
   listed under NAME); a key dir with no `id` adopts the one box named NAME
-  (and writes it, except under `PICK_NOADOPT=1`, which `ssh-config
-  --print`, `status`, `_sessions`, `doctor` and `prepared_live` set: they
-  only report, and count it own without writing); several boxes named NAME,
-  none recorded, or a bad `id` file: no id (`box_id` status 2, `BWHY`), so
+  (and writes it only in a command that acts on that box: `open`, `new`,
+  `attach`, `ssh`, `_proxy`, `destroy`, `gc` without `--dry-run`; every
+  other command, `prepared_live` and the stanza refresh in `ssh_config_put`
+  run under `PICK_NOADOPT=1` and count it own without writing); several
+  boxes named NAME, none recorded, a bad `id` file, or a listed box with no
+  usable id: no id (`box_id` status 2, `BWHY`), so
   an explicit NAME dies saying why, `doctor` warns, it is not own and gets
   no stanza or `ssh_connections` entry; never a by-name call. A recorded id
   is never traded for a box found by name: ours gone (id unlisted;

@@ -447,16 +447,25 @@ ID_G=cccccccc-0000-4000-8000-00000000000c   # gamma
 id_of() { printf '%08x-0000-4000-8000-%012x' "$(printf '%s' "$1" | cksum | cut -d' ' -f1)" "${#1}"; }
 
 # own NAME...: sessions this tool has prepared (a key dir), the only ones gc offers.
-own() { for o in "$@"; do mkdir -p "$STATE/sessions/$o"; done; }
+# It records the id of the one box of that name in the fixtures, as min-zed
+# would have; legacy NAME... makes a key dir from before ids (no id).
+own() {
+    for o in "$@"; do
+        mkdir -p "$STATE/sessions/$o"
+        oi=$(jq -r --arg n "$o" '[.sessions[] | select(.name == $n) | .id] | if length == 1 then .[0] else empty end' "$FIXTURES/sessions.json")
+        [ -z "$oi" ] || printf '%s\n' "$oi" > "$STATE/sessions/$o/id"
+    done
+}
+legacy() { for o in "$@"; do mkdir -p "$STATE/sessions/$o"; done; }
 
 # destroy without NAME looks only at own sessions for the cwd: another tool's
 # box for the same directory is neither picked nor counted.
 case_destroy_by_cwd_only_own() {
-    own beta
     cat > "$FIXTURES/sessions.json" <<JSON
 {"sessions":[{"id":"aaaaaaaa-0000-4000-8000-00000000000a","name":"alpha","project_path":"$AP","status":"active"},
  {"id":"bbbbbbbb-0000-4000-8000-00000000000b","name":"beta","project_path":"$AP","status":"active"}]}
 JSON
+    own beta
     (cd "$AP" && sh "$BIN" destroy -y > "$T/out" 2> "$T/err" < /dev/null); RC=$?
     assert_rc 0
     assert_log_contains "min session destroy $ID_B"
@@ -522,13 +531,13 @@ case_destroy_picker_on_a_terminal() {
 }
 
 orphan_sessions() {
-    own alpha beta gamma stopped
     cat > "$FIXTURES/sessions.json" <<JSON
 {"sessions":[{"id":"aaaaaaaa-0000-4000-8000-00000000000a","name":"alpha","project_path":"$AP","status":"active"},
  {"id":"bbbbbbbb-0000-4000-8000-00000000000b","name":"beta","project_path":"$T/beta-proj","status":"active"},
  {"id":"cccccccc-0000-4000-8000-00000000000c","name":"gamma","project_path":"$T/gamma-proj","status":"active"},
  {"id":"dddddddd-0000-4000-8000-00000000000d","name":"stopped","project_path":"$T/s","status":"stopped"}]}
 JSON
+    own alpha beta gamma stopped
 }
 age() { mkdir -p "$STATE/orphan"; printf '%s' "$(($(date +%s) - $2))" > "$STATE/orphan/$1"; }
 
@@ -2378,7 +2387,7 @@ case_ids_open_shared_name_refused() {
 
 # a key dir from before ids, and exactly one box of that name: its id is adopted
 case_ids_legacy_unique_adopted() {
-    own alpha
+    legacy alpha
     run _sessions
     assert_out_eq alpha
     assert_no_file "$STATE/sessions/alpha/id"   # completions only report
@@ -2482,6 +2491,14 @@ case_ids_in_use_maps_id() {
     run destroy -y --if-idle alpha
     assert_rc 0
     assert_log_contains "min session destroy $ID_A"
+    # a box not ours, connected by its id: --if-idle sees it in use
+    jq --arg i "$THEIRS" '.sessions += [{"id":$i,"name":"other","project_path":"/o","status":"active"}]' \
+        "$FIXTURES/sessions.json" > "$T/s.json" && mv "$T/s.json" "$FIXTURES/sessions.json"
+    reset_log
+    run destroy -y --if-idle other
+    assert_rc 3
+    assert_err_contains "other is in use now; not destroying"
+    assert_log_not_contains "session destroy"
 }
 
 # a corrupted id file never reaches min, the stanza or a list
@@ -2505,6 +2522,12 @@ $ID_A" "$(printf '%s' "$ID_A" | tr a A)" "../$ID_A"; do
         assert_out_eq ""
         run ssh-config --print
         ! grep -q "^Host ${HP}alpha\$" "$T/out" || fail "a stanza with a bad id: $(cat "$T/out")"
+        # min ls failing: still no stanza for it
+        printf 1 > "$FIXTURES/ls.fail-from"
+        run ssh-config --print
+        assert_rc 0
+        ! grep -q "^Host ${HP}alpha\$" "$T/out" || fail "a stanza with a bad id while min ls fails: $(cat "$T/out")"
+        rm -f "$FIXTURES/ls.fail-from"
         run doctor
         assert_out_contains "$STATE/sessions/alpha/id is not a session id"
     done
@@ -2699,6 +2722,31 @@ case_ids_report_only_no_adopt() {
     run doctor
     assert_out_contains "alpha will adopt box $ID_A on next use"
     assert_no_file "$STATE/sessions/alpha/id"
+    # nor do gc --dry-run, ssh-config, config (and --print) or setup: they act on no one box
+    run gc --dry-run
+    assert_rc 0
+    run ssh-config
+    assert_rc 0
+    assert_file_contains "$HOME/$CONF" "Host ${HP}alpha"
+    mkdir -p "$T/zed"
+    run config --print
+    assert_rc 0
+    run config
+    assert_rc 0
+    [ "$(cfg_hosts)" = "${HP}alpha" ] || fail "hosts: $(cfg_hosts)"
+    run setup
+    assert_no_file "$STATE/sessions/alpha/id"
+    # the settings sync (here after destroying another own box) writes none either
+    jq --arg i "$ID_B" '.sessions += [{"id":$i,"name":"beta","project_path":"/b","status":"active"}]' \
+        "$FIXTURES/sessions.json" > "$T/s.json" && mv "$T/s.json" "$FIXTURES/sessions.json"
+    own beta
+    run destroy -y beta
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_B"
+    [ "$(cfg_hosts)" = "${HP}alpha" ] || fail "hosts after the sync: $(cfg_hosts)"
+    assert_no_file "$STATE/sessions/alpha/id"
+    run setup --remove
+    assert_no_file "$STATE/sessions/alpha/id"
     # a command that acts on it adopts it
     run ssh alpha -- true
     assert_rc 0
@@ -2738,6 +2786,72 @@ case_ids_settings_by_name() {
     assert_rc 0
     [ "$(cfg_hosts)" = "" ] || fail "an entry for a name $TOOL cannot tell: $(cfg_hosts)"
     assert_no_file "$STATE/sessions/default/id"   # the sync's list only reports
+}
+
+
+# min ls exits 0 but prints no session list: as a failed min ls, never "no
+# box": keys, stanza and settings entry stay, and destroy fails
+case_ids_min_ls_junk_keeps_all() {
+    installed
+    mkdir -p "$T/zed"
+    run config
+    assert_rc 0
+    [ "$(cfg_hosts)" = "${HP}alpha" ] || fail "hosts: $(cfg_hosts)"
+    for junk in 'warning: update available' ''; do
+        printf '%s\n' "$junk" > "$FIXTURES/ls.junk"
+        reset_log
+        run destroy -y alpha
+        assert_rc_nonzero
+        assert_log_not_contains "session destroy"
+        assert_file "$STATE/sessions/alpha/id" "$ID_A"
+        run ssh-config
+        assert_file_contains "$HOME/$CONF" "Host ${HP}alpha"
+        run config
+        [ "$(cfg_hosts)" = "${HP}alpha" ] || fail "settings pruned on junk: $(cfg_hosts)"
+        run gc --dry-run
+        assert_rc 1
+        run status --json
+        assert_rc 1
+    done
+}
+
+# a key dir from before ids, and min lists the one box of that name with no
+# id: nothing to reach it by, and still listed, so its keys stay
+case_ids_null_id_keeps_keys() {
+    printf '{"sessions":[{"id":null,"name":"alpha","project_path":"%s","status":"active"}]}\n' "$AP" > "$FIXTURES/sessions.json"
+    legacy alpha
+    printf 'box\n' > "$STATE/sessions/alpha/user"
+    run destroy -y alpha
+    assert_rc 1
+    assert_err_contains "min lists box alpha with no session id"
+    assert_log_not_contains "session destroy"
+    assert_file "$STATE/sessions/alpha/user" box
+    assert_no_file "$STATE/sessions/alpha/id"
+    run _sessions
+    assert_out_eq ""
+}
+
+# activate: a new box min lists with no name records nothing under null
+case_ids_activate_null_name() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    jq --arg p "$P" '.sessions += [{"id":"12121212-0000-4000-8000-000000000012","name":null,"project_path":$p,"status":"active"}]' \
+        "$FIXTURES/sessions.json" > "$FIXTURES/sessions.after.json"
+    run new "$P" --no-window
+    assert_rc 1
+    assert_err_contains "not a hostname"
+    assert_no_file "$STATE/sessions/null"
+}
+
+# prepare refuses a bad id file and never writes over it
+case_ids_prepare_keeps_bad_id() {
+    own alpha
+    echo 'not-an-id' > "$STATE/sessions/alpha/id"
+    sed '/^# ---- main/,$d' "$BIN" > "$T/lib"
+    sh -c '. "$1"; MIN=$2; prepare alpha "$3"' sh "$T/lib" "$MIN_BIN" "$ID_A" >"$T/out" 2>"$T/err"; RC=$?
+    assert_rc 1
+    assert_err_contains "$STATE/sessions/alpha/id is not a session id; not using it"
+    assert_log_not_contains "session exec"
+    assert_file "$STATE/sessions/alpha/id" not-an-id
 }
 
 CASES="
@@ -2784,7 +2898,8 @@ ids_destroy_gone_by_id ids_gone_name_taken_never_reached ids_renamed_outside_ref
 ids_prepare_keeps_recorded_id ids_ls_failure_keeps_legacy_stanza
 ids_shared_name_reaches_ours ids_open_shared_name_refused ids_legacy_unique_adopted
 ids_legacy_ambiguous_not_own ids_activate_records_id ids_in_use_maps_id ids_corrupt_id_refused
-ids_gone_box_not_taken_over ids_settings_by_name"
+ids_gone_box_not_taken_over ids_settings_by_name ids_min_ls_junk_keeps_all ids_null_id_keeps_keys
+ids_activate_null_name ids_prepare_keeps_bad_id"
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.
 ssh_untouched() {

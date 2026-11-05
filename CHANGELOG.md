@@ -58,6 +58,18 @@ key instead.
   and record (`zed-config-installed`, `zed-config.json`) are taken over on
   the first run.
 - Needs min 0.7.0 or newer (`doctor` fails on older).
+- **Boxes are reached by id** (min 0.8,
+  [gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
+  lets boxes share a name and resolves a name to the running box): min-zed
+  records each box's id in `STATE/sessions/NAME/id` and passes it to every
+  `min session exec` and `destroy`, so another tool's box of the same name
+  is never connected to or destroyed, and never listed (CLI, stanzas,
+  Remote Projects, `status --json`, which now carries each `id`). The name
+  stays the handle: `min-zed.NAME`, the `ssh_connections` entry, the
+  commands. A key dir from before takes the id of the one box with its
+  name, written only by a command that acts on that box; when several
+  share it, min-zed leaves them alone and `doctor` says so. A `min ls` that
+  exits 0 without a session list counts as a failed one.
 
 ### Removed
 
@@ -69,18 +81,6 @@ key instead.
   the box itself.
 - Herdr support, bounded in-box reads (`MIN_ZED_EXEC_TIMEOUT`).
 - `jq` from the loadout; `docs/spike.md` and `docs/manual-test-plan.md`.
-
-- **Boxes are reached by id** (min 0.8,
-  [gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
-  lets boxes share a name and resolves a name to the running box): min-zed
-  records each box's id in `STATE/sessions/NAME/id` and passes it to every
-  `min session exec` and `destroy`, so another tool's box of the same name
-  is never connected to or destroyed, and never listed (CLI, stanzas,
-  Remote Projects, `status --json`, which now carries each `id`). The name
-  stays the handle: `min-zed.NAME`, the `ssh_connections` entry, the
-  commands. A key dir from before takes the id of the one box with its
-  name; when several share it, min-zed leaves them alone and `doctor` says
-  so.
 
 ### Fixed
 

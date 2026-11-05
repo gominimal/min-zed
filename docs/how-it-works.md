@@ -59,7 +59,7 @@ never replaces a recorded id with another one.
 ### Box ids
 
 min 0.8 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756))
-made a session name an alias: only a pending, starting or running box
+made a session name an alias: only a pending, materializing or running box
 holds it, a stopped box keeps it, a new box may take it, and min resolves a
 name to the running box, else the latest. Every min command min-zed runs on
 one box takes a full session id first, so min-zed addresses its own boxes
@@ -76,10 +76,13 @@ boxes only.
 Own means: a key dir whose recorded id `min ls` lists under the dir's name
 (a box renamed outside min-zed, or another tool's box that took the name,
 is not own). A key dir from before ids is adopted, its id written, when
-exactly one box has its name (by a command that acts on the box: `ssh-config
---print`, `status`, completions, `doctor` and the settings sync's list count
-it own without writing; `doctor` says it will be adopted); with several,
-none is own, no stanza or Remote Projects entry is written for it, and
+exactly one box has its name, by a command that acts on the box: `open`,
+`new`, `attach`, `ssh`, `_proxy`, `destroy` and `gc` (not `--dry-run`).
+Every other command counts it own without writing: `ssh-config` (and
+`--print`, `--remove`), `config` (and `--print`, `--remove`), `setup` (and
+`--remove`), `status`, `gc --dry-run`, completions, `doctor` (which says it
+will be adopted), and the stanza and settings refreshes any command sets
+off. With several boxes of its name, none is own, no stanza or Remote Projects entry is written for it, and
 `doctor` warns. The adoption has a risk: a legacy key dir whose own box is
 long gone adopts the one box that now holds the name, whoever made it.
 "Gone" is a successful `min ls` that no longer lists the recorded id. A
@@ -89,8 +92,10 @@ and `attach`, `ssh`, `open -n` and `_proxy` refuse ("your box NAME is gone;
 another box now has the name"); when min lists our id under another name
 (renamed outside min-zed), everything refuses. `_proxy NAME` reaches only
 an own box (or, with no key dir at all, the one box of that name). When
-`min ls` fails, the stanzas on disk stay (all but those with a bad `id`);
-`_proxy` decides at connect.
+`min ls` fails, or exits 0 without a session list (`.sessions` an array),
+the stanzas on disk stay (all but those with a bad `id`); `_proxy` decides
+at connect. A box min lists under NAME with no usable id is never reached,
+and never counts as gone.
 
 ### Stanzas and `_proxy`
 
