@@ -62,15 +62,16 @@ key instead.
   [gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
   lets boxes share a name and resolves a name to the running box): min-zed
   records each box's id in `STATE/sessions/NAME/id` and passes it to every
-  `min session exec` and `destroy`, so once a box's id is recorded, another
-  box of the same name is never connected to or destroyed in its place,
-  and never listed as min-zed's (CLI, stanzas, Remote Projects, `status
-  --json`, which now carries each `id`). The name stays the handle:
-  `min-zed.NAME`, the `ssh_connections` entry, the commands. A key dir
-  from before takes the id of the one box with its name, written only by a
-  command acting on that box by name (`open`, `attach`, `ssh`, `destroy`,
-  the connection itself), never by a list or `gc`, which skips such a dir;
-  if that box is not the one min-zed made, the name alone cannot tell.
+  `min session exec` and `destroy`, so another tool's box of the same name
+  is never reached under min-zed's record or by a name min-zed chose (CLI,
+  stanzas, Remote Projects, `status --json`, which now carries each `id`
+  and `recorded`); a box you name explicitly becomes min-zed's once it
+  connects. The name stays the handle: `min-zed.NAME`, the
+  `ssh_connections` entry, the commands. A key dir from before takes the
+  id of the one box with its name on its first connect (`open`, `attach`,
+  `ssh`, the connection itself), never from a list, `gc` or `destroy`:
+  `gc` lists such a dir without asking, and `destroy` with no NAME refuses
+  it; if that box is not the one min-zed made, the name alone cannot tell.
   When several share it, min-zed leaves them alone and `doctor` says so. A
   `min ls` that exits 0 without one session list counts as a failed one.
 

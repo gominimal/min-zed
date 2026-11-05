@@ -129,15 +129,19 @@ own surfaces, which `setup` wires: the Remote Projects list
   also refuses a NAME that is no session name) before it reaches a command
   line or a stanza. `pick_id`/`box_id` resolve NAME: own (the recorded id,
   listed under NAME); a key dir with no `id` adopts the one box named NAME
-  (and writes it only when `box_id`/`need_box` resolve that one NAME for a
-  command acting on it: `open`, `new`, `attach`, `ssh`, `_proxy`,
-  `destroy`; `own_filter` always runs `pick_id` under `PICK_NOADOPT=1`, so
-  no list adopts: open's reuse, the pickers, the cwd lookup, gc, status,
-  completions, stanzas, `prepared_live`; `ssh-config`, `config`, `setup`
-  and `doctor` set it too). `gc` never adopts or destroys a key dir with no
-  `id`: it lists it ("no id recorded (attach NAME once)") without asking.
-  In-use checks of own boxes go by name and id (gc rows, `gc_still_idle
-  NAME ID`, `st_used`). `min_ls` needs exactly one JSON value whose
+  (and writes it only on a connect: `attach`/`ssh`/`_proxy` through
+  `box_id`/`need_box`, `open` through `prepare` once the project checks
+  out; `own_filter` always runs `pick_id` under `PICK_NOADOPT=1`, so no
+  list adopts: open's reuse, the pickers, the cwd lookup, gc, status,
+  completions, stanzas, `prepared_live`; `cmd_open`, `cmd_destroy`,
+  `ssh-config`, `config`, `setup` and `doctor` set it too). `destroy`
+  never writes an id: an explicit `destroy NAME` reaches the one box of the
+  name by its id without recording it, and a NAME the cwd lookup or the
+  picker chose is refused unless its id is recorded ("NAME has no recorded
+  box id yet; …"). `gc` never adopts or destroys a key dir with no `id`: it
+  lists it ("no id recorded (attach NAME once)") without asking. `status
+  --json` gives `recorded`. In-use checks of own boxes go by name and id
+  (gc rows, `gc_still_idle NAME ID`, `st_used`, `track_orphans`). `min_ls` needs exactly one JSON value whose
   `.sessions` is an array of objects; a jq failure in `pick_id` is status 8
   ("could not read min ls"), never "none"; `pick_id` returns 1 for a NAME
   that is no session name before touching `sess_dir`; several
@@ -163,16 +167,15 @@ own surfaces, which `setup` wires: the Remote Projects list
   boxes made by `min` alone are never listed. The same holds wherever a
   session is chosen for the user: `open`'s reuse of a live session for PATH,
   `destroy`'s cwd lookup and its picker, the `attach` picker and `_sessions`
-  (completions). Only an explicit NAME (`attach NAME`, `destroy NAME`,
-  `open -n NAME`) may reach another tool's box.
+  (completions). Only an explicit NAME (`attach NAME`, `ssh NAME`,
+  `destroy NAME`, `open -n NAME`) may reach another tool's box.
 - `destroy` without NAME: exactly one own session for the cwd is it;
   otherwise, on a terminal (a Zed task), the own-session picker; without a
   terminal, or with no own session at all, the errors ("no session for DIR;
   pass NAME", "several sessions for DIR: …; pass NAME").
 - In use = some host process runs `min session exec X ... sshd` (any ssh
-  client's connection); X is an id (`in_use_names` also prints the name
-  whose `sessions/NAME/id` holds it) or a bare name (connections from before
-  ids, other tools). Never contact a box without such a live process: a
+  client's connection); X is an id or a bare name (connections from before
+  ids, other tools), and every check of an own box asks for both. Never contact a box without such a live process: a
   connect starts a stopped box.
 - `gc` re-checks `gc_still_idle` before each question; `destroy --if-idle`
   re-checks it too (exit 3 when in use); without a terminal, unsaved changes
@@ -192,7 +195,7 @@ own surfaces, which `setup` wires: the Remote Projects list
 ## External facts that bite
 
 - min 0.8.0-dev.381 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
-  BOX-004/005): a session name is an alias many boxes may share. Only a
+  BOX-004/005): a session name is an alias many boxes may share. A
   stopped box keeps its name, and `min ls` still lists it, but it does not
   stop a new box from taking the name; only a running box (or a resume in
   flight) does (minimald's `claim_name`/`running_name_holder`). A name

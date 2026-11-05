@@ -11,7 +11,7 @@ in the box, where `min-zed` is not installed.
 | `min-zed attach [NAME] [--no-window]` | an existing session in Zed (no NAME: pick one of min-zed's) |
 | `min-zed destroy [-y] [--if-idle] [--force] [NAME]` | ask `[y/N]`, then destroy. No NAME: min-zed's one session for the current directory; otherwise, on a terminal, pick one. `--if-idle` refuses with exit 3 while something is connected. Without a terminal, min refuses a session with unsaved changes: exit 4; `-y --force` discards them. When the `min ls` that follows fails, the session's keys and stanza stay, with a warning, and after a y the exit is non-zero (min's own status, or 1 when min destroyed it); once `min ls` lists its id no more (a key dir with no id: once no box is named NAME), `destroy NAME` removes what was kept |
 | `min-zed gc [--older-than SECONDS] [--dry-run]` | list active sessions no ssh client is using (oldest first), then ask `[y/N/q]` for each; a session from before min-zed recorded box ids is listed as "no id recorded (attach NAME once)" and not asked about |
-| `min-zed status [--json]` | table: session, status, project, in use, idle age; `--json`: `[{name, id, status, project, own, empty, in_use, idle}]` (`id`: min's session id; `own`: min-zed's box, by that id; idle in seconds or null, own boxes only) |
+| `min-zed status [--json]` | table: session, status, project, in use, idle age; `--json`: `[{name, id, status, project, own, recorded, empty, in_use, idle}]` (`id`: min's session id; `own`: min-zed's box, by that id; `recorded`: own, with that id in `STATE/sessions/NAME/id`; idle in seconds or null, own boxes only) |
 | `min-zed doctor` | health report; exits 1 on any FAIL |
 | `min-zed setup [--remove]` | the whole install from this checkout: links `~/.local/bin/min-zed` and the `zed` loadout here, copies Minimal's skills, then `ssh-config` and `config`; `--remove` undoes only ours |
 | `min-zed config [--remove\|--print]` | opt in to (or out of) the Zed wiring: `ssh_connections` in `settings.json`, the Minimal tasks in `tasks.json`, the local-terminal key in `keymap.json`; `--print` only prints. Also `min-zed zed-config` |
@@ -40,7 +40,7 @@ has keys for them under `STATE/sessions/NAME`, and the box's id in
 current-directory lookup and picker, the `attach` picker, completions, the
 ssh stanzas and the Remote Projects entries. Boxes other tools or `min`
 alone made are not its to tidy; only an explicit NAME (`attach NAME`,
-`destroy NAME`, `open -n NAME`) reaches them.
+`ssh NAME`, `destroy NAME`, `open -n NAME`) reaches them.
 
 Box ids: since min 0.8 several boxes may share a name (a stopped box keeps
 it, and a new one may take it), and min picks the running one, else the

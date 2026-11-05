@@ -1393,7 +1393,7 @@ case_status_json() {
     assert_rc 0
     j=$(cat "$T/out")
     [ "$(printf '%s' "$j" | jq -r 'map(.name) | join(" ")')" = "alpha beta gamma stopped box-amber" ] || fail "names: $j"
-    [ "$(printf '%s' "$j" | jq -c '.[0]')" = "{\"name\":\"alpha\",\"id\":\"$ID_A\",\"status\":\"active\",\"project\":\"$AP\",\"own\":true,\"empty\":false,\"in_use\":true,\"idle\":null}" ] \
+    [ "$(printf '%s' "$j" | jq -c '.[0]')" = "{\"name\":\"alpha\",\"id\":\"$ID_A\",\"status\":\"active\",\"project\":\"$AP\",\"own\":true,\"recorded\":true,\"empty\":false,\"in_use\":true,\"idle\":null}" ] \
         || fail "alpha: $(printf '%s' "$j" | jq -c '.[0]')"
     b=$(printf '%s' "$j" | jq '.[1].idle')
     [ "$b" -ge 7200 ] && [ "$b" -lt 7260 ] || fail "beta idle: $b"
@@ -2916,7 +2916,7 @@ case_ids_legacy_in_use_by_id() {
     exec_line 101 1 "$ID_A"
     run status --json
     assert_rc 0
-    [ "$(jq -c 'map(select(.name == "alpha")) | map([.own, .in_use])' "$T/out")" = '[[true,true]]' ] || fail "status --json: $(cat "$T/out")"
+    [ "$(jq -c 'map(select(.name == "alpha")) | map([.own, .recorded, .in_use])' "$T/out")" = '[[true,false,true]]' ] || fail "status --json: $(cat "$T/out")"
     run gc --dry-run
     assert_rc 0
     ! grep -q '^alpha ' "$T/out" || fail "gc offered alpha in use: $(cat "$T/out")"
@@ -2943,6 +2943,93 @@ case_ids_unreadable_ls_never_none() {
     sed '/^# ---- main/,$d' "$BIN" > "$T/lib"
     sh -c '. "$1"; r=0; box_id alpha "not json" || r=$?; echo "rc=$r $BWHY"' sh "$T/lib" > "$T/out" 2>&1
     assert_out_contains "rc=2 could not read min ls"
+}
+
+
+# a NAME chosen for the user (cwd lookup, picker) with no recorded id is
+# refused: never adopted and destroyed in one step
+case_ids_destroy_cwd_legacy_refused() {
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"}]}\n' "$THEIRS" "$AP" > "$FIXTURES/sessions.json"
+    legacy alpha
+    (cd "$AP" && sh "$BIN" destroy -y > "$T/out" 2> "$T/err" < /dev/null); RC=$?
+    assert_rc 1
+    assert_err_contains "alpha has no recorded box id yet; attach it once so $TOOL records it, or run $TOOL destroy alpha"
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+    if run_tty "$P" '1\ny\n' destroy; then
+        assert_out_contains "alpha has no recorded box id yet"
+        assert_log_not_contains "session destroy"
+        assert_no_file "$STATE/sessions/alpha/id"
+    fi
+}
+
+# destroy never writes an id: answered N, or --if-idle in use, the key dir
+# stays unrecorded, and gc still lists it as such
+case_ids_destroy_never_records() {
+    legacy alpha
+    if run_tty "$P" 'n\n' destroy alpha; then
+        assert_out_contains "Destroy Minimal session alpha ($AP)? [y/N]"
+        assert_log_not_contains "session destroy"
+        assert_no_file "$STATE/sessions/alpha/id"
+    fi
+    exec_line 101 1 alpha
+    run destroy -y --if-idle alpha
+    assert_rc 3
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+    : > "$FIXTURES/ps.txt"
+    run gc --dry-run
+    assert_out_contains "no id recorded (attach alpha once)"
+    # an explicit destroy NAME answered y still reaches the one box of that name, by id
+    run destroy -y alpha
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
+}
+
+# on a terminal, min session destroy gets the id too
+case_ids_destroy_tty_by_id() {
+    installed
+    reset_log
+    run_tty "$P" 'y\n' destroy alpha || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
+    assert_log_not_contains "min session destroy alpha"
+}
+
+# open -n NAME for another folder dies before anything records NAME's id
+case_ids_open_wrong_project_no_adopt() {
+    ssh_conf_empty
+    legacy alpha
+    run open "$P" -n alpha --no-window
+    assert_rc 1
+    assert_err_contains "session alpha is for $AP, not $P"
+    assert_no_file "$STATE/sessions/alpha/id"
+    assert_log_not_contains "session exec"
+}
+
+# an idle age restarts while the box is in use by its id
+case_ids_orphan_age_restarts_by_id() {
+    own alpha
+    age alpha 7200
+    exec_line 101 1 "$ID_A"
+    run status
+    assert_rc 0
+    a=$(($(date +%s) - $(cat "$STATE/orphan/alpha")))
+    [ "$a" -lt 60 ] || fail "orphan/alpha not restarted: $a s old"
+}
+
+# status: a bare name in ps is the own box's, never a foreign box of that name
+case_ids_status_bare_name_is_own() {
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$ID_A","name":"alpha","project_path":"$AP","status":"active"},
+ {"id":"$THEIRS","name":"alpha","project_path":"$T/herdr","status":"stopped"}]}
+JSON
+    own alpha; printf '%s\n' "$ID_A" > "$STATE/sessions/alpha/id"
+    exec_line 101 1 alpha
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map([.id, .own, .recorded, .in_use])' "$T/out")" = "[[\"$ID_A\",true,true,true],[\"$THEIRS\",false,false,false]]" ] \
+        || fail "status --json: $(cat "$T/out")"
 }
 
 CASES="
@@ -2991,7 +3078,8 @@ ids_shared_name_reaches_ours ids_open_shared_name_refused ids_legacy_unique_adop
 ids_legacy_ambiguous_not_own ids_activate_records_id ids_in_use_maps_id ids_corrupt_id_refused
 ids_gone_box_not_taken_over ids_settings_by_name ids_min_ls_junk_keeps_all ids_null_id_keeps_keys
 ids_activate_null_name ids_prepare_keeps_bad_id ids_bystander_never_adopted ids_gc_skips_legacy
-ids_legacy_in_use_by_id ids_unreadable_ls_never_none"
+ids_legacy_in_use_by_id ids_unreadable_ls_never_none ids_destroy_cwd_legacy_refused ids_destroy_never_records
+ids_destroy_tty_by_id ids_open_wrong_project_no_adopt ids_orphan_age_restarts_by_id ids_status_bare_name_is_own"
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.
 ssh_untouched() {

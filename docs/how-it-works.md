@@ -21,7 +21,7 @@ min-zed does not define) when the client layer defines them.
 
 ## Transport
 
-`min session exec NAME argv...` is a byte-transparent, non-PTY exec channel
+`min session exec ID argv...` is a byte-transparent, non-PTY exec channel
 into the box. The ProxyCommand runs `sshd -i` over it, so ssh speaks to a
 real OpenSSH server on stdin/stdout. No port listens anywhere.
 
@@ -77,9 +77,12 @@ boxes only.
 Own means: a key dir whose recorded id `min ls` lists under the dir's name
 (a box renamed outside min-zed, or another tool's box that took the name,
 is not own). A key dir from before ids is adopted, its id written, when
-exactly one box has its name, and only by a command that acts on that box:
-`open`, `new`, `attach`, `ssh`, `_proxy` or `destroy` naming it (given, or
-chosen in a picker or by the current directory). Lists never adopt: the own
+exactly one box has its name, and only by a connect to that box: `attach`,
+`ssh`, `_proxy`, or `open` once the project checks out (given, or chosen
+in a picker). `destroy` never writes an id: `destroy NAME` reaches the one
+box of that name by its id without recording it, and with no NAME (the
+current directory, the picker) it refuses a dir with no recorded id ("NAME
+has no recorded box id yet; attach it once…"). Lists never adopt: the own
 list (`own_filter`) behind open's reuse, the pickers, `destroy`'s cwd
 lookup, `gc`, `status`, completions, the stanzas and the Remote Projects
 entries counts it own without writing, so a command on one box never
@@ -87,8 +90,9 @@ adopts another's; nor do `ssh-config`, `config`, `setup` (with their
 flags) or `doctor` (which says it will be adopted). `gc` never adopts or
 destroys such a dir: it lists it as "no id recorded (attach NAME once)"
 and does not ask. With several boxes of its name, none is own, no stanza
-or Remote Projects entry is written for it, and `doctor` warns. The adoption has a risk: a legacy key dir whose own box is
-long gone adopts the one box that now holds the name, whoever made it.
+or Remote Projects entry is written for it, and `doctor` warns. The
+adoption has a risk: a legacy key dir whose own box is long gone adopts the
+one box that now holds the name, whoever made it.
 "Gone" is a successful `min ls` that no longer lists the recorded id. A
 recorded id is never traded for a box found by name: when ours is gone and
 another box has the name, `destroy NAME` drops only our keys and records,
@@ -140,8 +144,9 @@ Include deletes those, so `~/.ssh/config` ends byte for byte as it was.
 `in_use_names` reads the host process table (`ps -xo pid=,ppid=,args=`)
 for processes whose argv has `session exec X <path ending /sshd>`:
 `_proxy` after its exec, ControlPersist masters, any ssh client. X is an id
-(mapped back to its name through the `sessions/NAME/id` files) or, for
-connections opened before ids or by other tools, a name. Nothing contacts a
+or, for connections opened before ids or by other tools, a name; every
+check of an own box (status, gc, idle ages, `destroy --if-idle`) asks for
+both its name and its id. Nothing contacts a
 box to find out.
 
 ## Client layer
