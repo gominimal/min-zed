@@ -2495,6 +2495,9 @@ case_ids_in_use_maps_id() {
     jq --arg i "$THEIRS" '.sessions += [{"id":$i,"name":"other","project_path":"/o","status":"active"}]' \
         "$FIXTURES/sessions.json" > "$T/s.json" && mv "$T/s.json" "$FIXTURES/sessions.json"
     reset_log
+    run status --json
+    [ "$(jq -c 'map(select(.name == "other")) | map(.in_use)' "$T/out")" = '[true]' ] || fail "foreign row by id: $(cat "$T/out")"
+    reset_log
     run destroy -y --if-idle other
     assert_rc 3
     assert_err_contains "other is in use now; not destroying"
@@ -2527,6 +2530,8 @@ $ID_A" "$(printf '%s' "$ID_A" | tr a A)" "../$ID_A"; do
         run ssh-config --print
         assert_rc 0
         ! grep -q "^Host ${HP}alpha\$" "$T/out" || fail "a stanza with a bad id while min ls fails: $(cat "$T/out")"
+        run ssh-config
+        ! grep -q "^Host ${HP}alpha\$" "$HOME/$CONF" || fail "ssh-config wrote a stanza with a bad id while min ls fails"
         rm -f "$FIXTURES/ls.fail-from"
         run doctor
         assert_out_contains "$STATE/sessions/alpha/id is not a session id"
@@ -2720,7 +2725,7 @@ case_ids_report_only_no_adopt() {
     run _sessions
     assert_out_eq alpha
     run doctor
-    assert_out_contains "alpha will adopt box $ID_A on next use"
+    assert_out_contains "alpha will adopt box $ID_A when a command acts on alpha"
     assert_no_file "$STATE/sessions/alpha/id"
     # nor do gc --dry-run, ssh-config, config (and --print) or setup: they act on no one box
     run gc --dry-run
@@ -2854,6 +2859,92 @@ case_ids_prepare_keeps_bad_id() {
     assert_file "$STATE/sessions/alpha/id" not-an-id
 }
 
+
+# bystander key dirs from before ids are never adopted by a command acting
+# on another box, nor by a list: open's reuse, ssh, attach (and its settings
+# sync), gc answered N, the pickers, destroy's cwd lookup
+case_ids_bystander_never_adopted() {
+    installed                                     # alpha's facts and id, ssh-config
+    mkdir -p "$T/zed"; run config; assert_rc 0
+    jq --arg i "$ID_B" --arg p "$T/beta-proj" '.sessions += [{"id":$i,"name":"beta","project_path":$p,"status":"active"}]' \
+        "$FIXTURES/sessions.json" > "$T/s.json" && mv "$T/s.json" "$FIXTURES/sessions.json"
+    legacy beta; printf 'box\n' > "$STATE/sessions/beta/user"
+    for c in "ssh alpha -- true" "attach alpha --no-window" "open $AP --no-window"; do
+        # shellcheck disable=SC2086  # a command and its words
+        run $c
+        assert_rc 0
+        assert_no_file "$STATE/sessions/beta/id"
+    done
+    assert_log_not_contains "session activate"   # open reused alpha
+    run_stdin 'n
+n
+' gc
+    assert_rc 0
+    assert_no_file "$STATE/sessions/beta/id"
+    if run_tty "$P" '9\n' attach; then
+        assert_out_contains ") beta"
+        assert_no_file "$STATE/sessions/beta/id"
+        run_tty "$P" '9\n' destroy
+        assert_no_file "$STATE/sessions/beta/id"
+    fi
+    reset_log
+    (cd "$AP" && sh "$BIN" destroy -y > "$T/out" 2> "$T/err" < /dev/null); RC=$?
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
+    assert_no_file "$STATE/sessions/beta/id"
+    # the box acted on adopts
+    run ssh beta -- true
+    assert_rc 0
+    assert_file "$STATE/sessions/beta/id" "$ID_B"
+}
+
+# gc never adopts or destroys a key dir with no id: listed, never asked
+case_ids_gc_skips_legacy() {
+    legacy alpha
+    run_stdin 'y
+' gc
+    assert_rc 0
+    assert_out_contains "no id recorded (attach alpha once)"
+    ! grep -qF "Destroy Minimal session alpha" "$T/err" || fail "asked about alpha"
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+}
+
+# an own key dir with no id, connected by id (another client): in use
+case_ids_legacy_in_use_by_id() {
+    legacy alpha
+    exec_line 101 1 "$ID_A"
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map(select(.name == "alpha")) | map([.own, .in_use])' "$T/out")" = '[[true,true]]' ] || fail "status --json: $(cat "$T/out")"
+    run gc --dry-run
+    assert_rc 0
+    ! grep -q '^alpha ' "$T/out" || fail "gc offered alpha in use: $(cat "$T/out")"
+}
+
+# min ls whose sessions are not all objects, or that box_id cannot read:
+# never "no box"
+case_ids_unreadable_ls_never_none() {
+    ssh_conf_empty
+    alpha_facts
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"},1]}\n' "$ID_A" "$AP" > "$FIXTURES/sessions.json"
+    reset_log
+    run destroy -y alpha
+    assert_rc 1
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    run open "$P" -n alpha --no-window
+    assert_rc 1
+    assert_log_not_contains "session activate"
+    assert_log_not_contains "session destroy"
+    printf '{"x":1}\n{"sessions":[]}\n' > "$FIXTURES/ls.junk"   # a JSON line before the list
+    run destroy -y alpha
+    assert_rc 1
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    sed '/^# ---- main/,$d' "$BIN" > "$T/lib"
+    sh -c '. "$1"; r=0; box_id alpha "not json" || r=$?; echo "rc=$r $BWHY"' sh "$T/lib" > "$T/out" 2>&1
+    assert_out_contains "rc=2 could not read min ls"
+}
+
 CASES="
 gc_no_own_sessions_yet open_activates_and_launches_editor open_reuses_live_session_for_path open_skips_foreign_session_for_path
 open_needs_ssh_config
@@ -2899,7 +2990,8 @@ ids_prepare_keeps_recorded_id ids_ls_failure_keeps_legacy_stanza
 ids_shared_name_reaches_ours ids_open_shared_name_refused ids_legacy_unique_adopted
 ids_legacy_ambiguous_not_own ids_activate_records_id ids_in_use_maps_id ids_corrupt_id_refused
 ids_gone_box_not_taken_over ids_settings_by_name ids_min_ls_junk_keeps_all ids_null_id_keeps_keys
-ids_activate_null_name ids_prepare_keeps_bad_id"
+ids_activate_null_name ids_prepare_keeps_bad_id ids_bystander_never_adopted ids_gc_skips_legacy
+ids_legacy_in_use_by_id ids_unreadable_ls_never_none"
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.
 ssh_untouched() {

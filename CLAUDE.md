@@ -129,10 +129,18 @@ own surfaces, which `setup` wires: the Remote Projects list
   also refuses a NAME that is no session name) before it reaches a command
   line or a stanza. `pick_id`/`box_id` resolve NAME: own (the recorded id,
   listed under NAME); a key dir with no `id` adopts the one box named NAME
-  (and writes it only in a command that acts on that box: `open`, `new`,
-  `attach`, `ssh`, `_proxy`, `destroy`, `gc` without `--dry-run`; every
-  other command, `prepared_live` and the stanza refresh in `ssh_config_put`
-  run under `PICK_NOADOPT=1` and count it own without writing); several
+  (and writes it only when `box_id`/`need_box` resolve that one NAME for a
+  command acting on it: `open`, `new`, `attach`, `ssh`, `_proxy`,
+  `destroy`; `own_filter` always runs `pick_id` under `PICK_NOADOPT=1`, so
+  no list adopts: open's reuse, the pickers, the cwd lookup, gc, status,
+  completions, stanzas, `prepared_live`; `ssh-config`, `config`, `setup`
+  and `doctor` set it too). `gc` never adopts or destroys a key dir with no
+  `id`: it lists it ("no id recorded (attach NAME once)") without asking.
+  In-use checks of own boxes go by name and id (gc rows, `gc_still_idle
+  NAME ID`, `st_used`). `min_ls` needs exactly one JSON value whose
+  `.sessions` is an array of objects; a jq failure in `pick_id` is status 8
+  ("could not read min ls"), never "none"; `pick_id` returns 1 for a NAME
+  that is no session name before touching `sess_dir`; several
   boxes named NAME, none recorded, a bad `id` file, or a listed box with no
   usable id: no id (`box_id` status 2, `BWHY`), so
   an explicit NAME dies saying why, `doctor` warns, it is not own and gets
@@ -185,9 +193,10 @@ own surfaces, which `setup` wires: the Remote Projects list
 
 - min 0.8.0-dev.381 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
   BOX-004/005): a session name is an alias many boxes may share. Only a
-  pending, materializing or running box holds it; a stopped box keeps it
-  and a new box may reuse it; a name resolves to the running box, else the
-  latest. `session exec`, `attach`, `destroy`, `rename` and `policy` take a
+  stopped box keeps its name, and `min ls` still lists it, but it does not
+  stop a new box from taking the name; only a running box (or a resume in
+  flight) does (minimald's `claim_name`/`running_name_holder`). A name
+  resolves to the running box, else the latest. `session exec`, `attach`, `destroy`, `rename` and `policy` take a
   full session id first (`SessionLookup::parse`), and `min ls --json` gives
   each session's `id` (lowercase hex UUID) and `name` (which may be null).
 - `min` is a zsh function on the host; `MIN_BIN` is resolved to an absolute

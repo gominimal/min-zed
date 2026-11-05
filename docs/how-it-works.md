@@ -59,9 +59,10 @@ never replaces a recorded id with another one.
 ### Box ids
 
 min 0.8 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756))
-made a session name an alias: only a pending, materializing or running box
-holds it, a stopped box keeps it, a new box may take it, and min resolves a
-name to the running box, else the latest. Every min command min-zed runs on
+made a session name an alias: a stopped box keeps its name, and `min ls`
+still lists it, but it does not stop a new box from taking the name; only a
+running box (or a resume in flight) does. min resolves a name to the
+running box, else the latest. Every min command min-zed runs on
 one box takes a full session id first, so min-zed addresses its own boxes
 by id: `session exec` (prepare, `_proxy`, `ssh`'s ProxyCommand) and
 `session destroy`. The id is `sessions/NAME/id`, one line, checked against
@@ -76,14 +77,17 @@ boxes only.
 Own means: a key dir whose recorded id `min ls` lists under the dir's name
 (a box renamed outside min-zed, or another tool's box that took the name,
 is not own). A key dir from before ids is adopted, its id written, when
-exactly one box has its name, by a command that acts on the box: `open`,
-`new`, `attach`, `ssh`, `_proxy`, `destroy` and `gc` (not `--dry-run`).
-Every other command counts it own without writing: `ssh-config` (and
-`--print`, `--remove`), `config` (and `--print`, `--remove`), `setup` (and
-`--remove`), `status`, `gc --dry-run`, completions, `doctor` (which says it
-will be adopted), and the stanza and settings refreshes any command sets
-off. With several boxes of its name, none is own, no stanza or Remote Projects entry is written for it, and
-`doctor` warns. The adoption has a risk: a legacy key dir whose own box is
+exactly one box has its name, and only by a command that acts on that box:
+`open`, `new`, `attach`, `ssh`, `_proxy` or `destroy` naming it (given, or
+chosen in a picker or by the current directory). Lists never adopt: the own
+list (`own_filter`) behind open's reuse, the pickers, `destroy`'s cwd
+lookup, `gc`, `status`, completions, the stanzas and the Remote Projects
+entries counts it own without writing, so a command on one box never
+adopts another's; nor do `ssh-config`, `config`, `setup` (with their
+flags) or `doctor` (which says it will be adopted). `gc` never adopts or
+destroys such a dir: it lists it as "no id recorded (attach NAME once)"
+and does not ask. With several boxes of its name, none is own, no stanza
+or Remote Projects entry is written for it, and `doctor` warns. The adoption has a risk: a legacy key dir whose own box is
 long gone adopts the one box that now holds the name, whoever made it.
 "Gone" is a successful `min ls` that no longer lists the recorded id. A
 recorded id is never traded for a box found by name: when ours is gone and
