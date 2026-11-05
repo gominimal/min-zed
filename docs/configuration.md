@@ -26,6 +26,10 @@ they follow the checkout wherever it moves once `setup` runs again.
 Needs min 0.7.0 or newer; `doctor` fails on an older one. Tested with Zed
 1.26.2; `doctor` notes any other version.
 
+Do not go from an unstable (dev) Minimal build back to an rc: the older
+daemon cannot read the newer box index, and the VM will not start
+([minimal#3060](https://github.com/gominimal/minimal/issues/3060)).
+
 **Loadout.** `loadouts/zed.toml` adds `openssh`, `curl`, `rsync`, `xxhash`
 and `git`, copies Minimal's `minimal-sandbox` skill into `~/.claude/skills`
 in the box (Claude Agent and Claude Code there; vendored in `loadouts/zed/`
