@@ -6,7 +6,7 @@
 Zed ──ssh min-zed.NAME──▶ /usr/bin/ssh ──ProxyCommand──▶ min-zed _proxy NAME
                                                             │ prepare (re-pin, push key)
                                                             ▼
-                                          exec min session exec NAME sshd -i ...
+                                          exec min session exec ID sshd -i ...
                                                             │ (min's exec channel)
                                                             ▼
                                                 sshd in the box ◀── Zed's remote server
@@ -35,8 +35,8 @@ forwarding off, `internal-sftp`.
 ### prepare and PREP
 
 Before every connection (`open`, `attach`, `ssh`, and `_proxy` behind every
-stanza) `prepare` runs one `min session exec NAME sh -c PREP min-zed
-PUBKEY`. PREP, in the box:
+stanza) `prepare` runs one `min session exec ID sh -c PREP min-zed
+PUBKEY`, ID being the box's id (below). PREP, in the box:
 
 - generates the box's host key once, under a lock (`.keygen` dir; stale
   locks broken by one waiter at a time; the pair renamed into place whole),
@@ -48,12 +48,49 @@ PUBKEY`. PREP, in the box:
 - prints `user=`, `home=`, `sshd=`, `hostkey=`.
 
 The host validates every fact (they come from an untrusted box), then writes
-`known_hosts` (`min-zed.NAME <key>`), `user`, `home`, `sshd` under
+`known_hosts` (`min-zed.NAME <key>`), `user`, `home`, `sshd` and `id` under
 `~/.local/state/min-zed/sessions/NAME/`, each by rename, and refreshes the
 stanza file; if a write fails, `prepare` stops there. `_proxy` and the
-ProxyCommand `min-zed ssh` builds re-check the stored `home` and `sshd`
-before using them. A session recreated under the same name therefore heals
-on the next connect.
+ProxyCommand `min-zed ssh` builds re-check the stored `home`, `sshd` and
+`id` before using them. A box min-zed recreates (`open -n NAME` once the
+old one is gone) gets a new id and heals on its first connect; `prepare`
+never replaces a recorded id with another one.
+
+### Box ids
+
+min 0.8 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756))
+made a session name an alias: only a pending, starting or running box
+holds it, a stopped box keeps it, a new box may take it, and min resolves a
+name to the running box, else the latest. Every min command min-zed runs on
+one box takes a full session id first, so min-zed addresses its own boxes
+by id: `session exec` (prepare, `_proxy`, `ssh`'s ProxyCommand) and
+`session destroy`. The id is `sessions/NAME/id`, one line, checked against
+`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}` whenever it is
+read; a file that fails the check is never used (the box is not own, and
+naming it is refused). Activation records it: the one id `min ls` lists
+afterwards and not before (named NAME with `-n`, else for the folder).
+Names stay the key everywhere else: the `min-zed.NAME` host alias, the key
+dir, and the `ssh_connections` entry (`host`, `nickname`), which lists own
+boxes only.
+
+Own means: a key dir whose recorded id `min ls` lists under the dir's name
+(a box renamed outside min-zed, or another tool's box that took the name,
+is not own). A key dir from before ids is adopted, its id written, when
+exactly one box has its name (by a command that acts on the box: `ssh-config
+--print`, `status`, completions, `doctor` and the settings sync's list count
+it own without writing; `doctor` says it will be adopted); with several,
+none is own, no stanza or Remote Projects entry is written for it, and
+`doctor` warns. The adoption has a risk: a legacy key dir whose own box is
+long gone adopts the one box that now holds the name, whoever made it.
+"Gone" is a successful `min ls` that no longer lists the recorded id. A
+recorded id is never traded for a box found by name: when ours is gone and
+another box has the name, `destroy NAME` drops only our keys and records,
+and `attach`, `ssh`, `open -n` and `_proxy` refuse ("your box NAME is gone;
+another box now has the name"); when min lists our id under another name
+(renamed outside min-zed), everything refuses. `_proxy NAME` reaches only
+an own box (or, with no key dir at all, the one box of that name). When
+`min ls` fails, the stanzas on disk stay (all but those with a bad `id`);
+`_proxy` decides at connect.
 
 ### Stanzas and `_proxy`
 
@@ -63,7 +100,7 @@ on the next connect.
     Include ~/.ssh/min-zed.conf
 
 `~/.ssh/min-zed.conf` (mode 600) has one stanza per prepared session that
-min still lists:
+min still lists as own (by its id):
 
     # myproject-3f9c
     Host min-zed.myproject-3f9c
@@ -81,7 +118,7 @@ min still lists:
 then a catch-all `Host min-zed.* !min-zed.*.*` whose ProxyCommand explains
 that no stanza exists (it passes no hostname to the shell). The file is
 rewritten only when its content changes. `_proxy` writes nothing to stdout
-before it `exec`s `min session exec NAME sshd ...`, and logs one line per
+before it `exec`s `min session exec ID sshd ...`, and logs one line per
 attempt to `proxy.log` (mode 600, capped): `ok`, or `fail:` and why.
 
 Any other `Include ~/.ssh/min-*.conf` line in `~/.ssh/config` is left
@@ -92,9 +129,11 @@ Include deletes those, so `~/.ssh/config` ends byte for byte as it was.
 ### In use
 
 `in_use_names` reads the host process table (`ps -xo pid=,ppid=,args=`)
-for processes whose argv has `session exec NAME <path ending /sshd>`:
-`_proxy` after its exec, ControlPersist masters, any ssh client. Nothing
-contacts a box to find out.
+for processes whose argv has `session exec X <path ending /sshd>`:
+`_proxy` after its exec, ControlPersist masters, any ssh client. X is an id
+(mapped back to its name through the `sessions/NAME/id` files) or, for
+connections opened before ids or by other tools, a name. Nothing contacts a
+box to find out.
 
 ## Client layer
 
@@ -162,7 +201,7 @@ numbered pickers and `[y/N]` questions read from it.
 
 | Path | What |
 |---|---|
-| `sessions/NAME/` | `id_ed25519` keypair, `known_hosts`, `user`, `home`, `sshd` |
+| `sessions/NAME/` | `id_ed25519` keypair, `known_hosts`, `user`, `home`, `sshd`, `id` (the box's min session id: min-zed reaches it by that) |
 | `created/NAME` | the session was activated by min-zed (has the loadout) |
 | `orphan/NAME`, `kept/NAME` | first seen unused by `gc` or `status` (epoch); kept at a destroy prompt |
 | `box/` | the empty folder `new --empty` activates on |
