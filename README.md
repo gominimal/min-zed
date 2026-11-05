@@ -83,7 +83,7 @@ too: ⌃⌥N New Box from Folder…, ⌃⌥O Open Box….
 
 | To | Do |
 |---|---|
-| Start on a project | Open the folder in Zed, then **Minimal: New Box from Folder…**. The folder is copied to `/workbench` in a new box and a window opens on it. With no folder open, it asks for one in the macOS folder picker. |
+| Start on a project | Open the folder in Zed, then **Minimal: New Box from Folder…**. The folder is copied to `/workbench` in a new box and a window opens on it. With no folder open, it asks for one in the macOS folder picker. If a box is already running for the folder, it asks `[Y/n]` to attach to that one instead. |
 | Start from scratch | **Minimal: New Empty Box**: an empty `/workbench`. |
 | Come back to a box | **Remote Projects** (⌃⌘O, or "projects: open remote"): every box is listed by name. Or **Minimal: Open Box…**, or Open Recent. |
 | See what is running | **Minimal: Status**: each box, whether something is connected, how long it has been idle. |
