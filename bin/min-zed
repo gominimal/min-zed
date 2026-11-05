@@ -77,13 +77,19 @@ mn() { "$MIN" "$@"; }
 min_ls() { mn ls --json </dev/null; }
 # own_filter: min ls --json on stdin, narrowed to the sessions this tool has
 # prepared (a key dir under $STATE/sessions). gc, orphan reminders, open's
-# reuse, destroy's cwd lookup, the attach picker and completions use only
-# these: other tools' boxes are theirs. own_ls: the same from min ls.
+# reuse, new's offer, destroy's cwd lookup, the attach picker and completions
+# use only these: other tools' boxes are theirs. own_ls: the same from min ls.
 own_filter() {
     ol_mine=$(for s in "$STATE"/sessions/*/; do if [ -d "$s" ]; then basename "$s"; fi; done)
     jq --arg m "$ol_mine" '($m | split("\n")) as $k | .sessions |= map(select(.name as $n | $k | index([$n])))'
 }
 own_ls() { ol_j=$(min_ls) || return 1; printf '%s' "$ol_j" | own_filter; }
+# live_box PATH: the live own session for PATH, if any, when its name is a
+# hostname: what open reuses and new offers.
+live_box() {
+    own_ls | jq -r --arg p "$1" '[.sessions[] | select(.status == "active" and .project_path == $p
+        and (.name | test("^[a-z0-9][a-z0-9-]*$"))) | .name][0] // empty'
+}
 # sess_field NAME FIELD  (id | project_path | status | branch)
 sess_field() {
     min_ls | jq -r --arg n "$1" --arg f "$2" '
@@ -793,8 +799,9 @@ usage: $TOOL <command> [args]
                           the session for PATH (default .): a live one of $TOOL's is reused, else
                           one is activated with --loadout $LOADOUT; then $EDITOR_NAME opens $WORKDIR in it
   new [PATH | --empty] [-n NAME] [--no-window]
-                          always a new session for PATH, then $EDITOR_NAME; --empty: an empty
-                          $WORKDIR (min names it box-...)
+                          a new session for PATH, then $EDITOR_NAME; on a terminal, when one of
+                          $TOOL's is live for PATH, asks to attach to it first (not with -n or
+                          --empty); --empty: an empty $WORKDIR (min names it box-...)
   attach [NAME] [--no-window]
                           an existing session in $EDITOR_NAME (no NAME: pick one of $TOOL's)
   destroy [-y] [--if-idle] [--force] [NAME]
@@ -1032,7 +1039,9 @@ connect() {
 # ---- commands --------------------------------------------------------------------
 
 # open|new [PATH] [-n NAME] [--no-window]; new --empty: an empty box on
-# $STATE/box, so min names it box-<hex>.
+# $STATE/box, so min names it box-<hex>. new without -n or --empty, on a
+# terminal, offers PATH's live box first; a second one may fail on a host
+# port the first holds.
 cmd_open() {
     mode=$1; shift
     path=. name='' gave='' nowin='' empty=''
@@ -1055,8 +1064,17 @@ cmd_open() {
     path=$(CDPATH='' cd -P -- "$path" && pwd -P)
     [ -f "$SSH_CONF" ] || die "$EDITOR_NAME reaches the box as ssh ${HOST_PREFIX}NAME: run $TOOL ssh-config first ($TOOL setup does)"
     if [ "$mode" = open ] && [ -z "$name" ]; then
-        name=$(own_ls | jq -r --arg p "$path" '[.sessions[] | select(.status == "active" and .project_path == $p
-            and (.name | test("^[a-z0-9][a-z0-9-]*$"))) | .name][0] // empty')
+        name=$(live_box "$path")
+    elif [ "$mode" = new ] && [ -z "$name" ] && [ -z "$empty" ] && [ -t 0 ]; then
+        live=$(live_box "$path")
+        if [ -n "$live" ]; then
+            printf 'Box %s is already running for %s. Attach to it instead of making a second one? [Y/n] ' "$live" "$path" >&2
+            IFS= read -r a || a=
+            case $a in
+                [nN]*) ;;
+                *) name=$live mode=open ;;   # open: past new's "already exists" below
+            esac
+        fi
     elif [ -n "$name" ] && [ -n "$gave" ] && sess_exists "$name" && [ "$(sess_field "$name" project_path)" != "$path" ]; then
         die "session $name is for $(sess_field "$name" project_path), not $path"
     fi

@@ -72,6 +72,13 @@ key instead.
 
 ### Fixed
 
+- `new` (and so ⌃⌥N, New Box from Folder…) no longer goes straight to a
+  second box when one of min-zed's is already running for the folder. A
+  second box could fail on a host port the first holds (`Port N is already
+  in use on this machine by box NAME`) and end the task with no window. On a
+  terminal `new` now asks `[Y/n]` to attach to the running box; `n` makes the
+  second box as before. Without a terminal, or with `-n` or `--empty`, it
+  never asks.
 - `destroy` and `gc`: a failed `min ls` after the answer no longer counts as
   the box being gone. Before, it removed the session's keys, refreshed
   settings and dropped its ssh stanza even after an `n`; now everything is
