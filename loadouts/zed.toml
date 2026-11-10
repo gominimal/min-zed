@@ -12,8 +12,8 @@ description = "sshd for Zed remote projects (min-zed)"
 # The box user is uid 1000 with $HOME=/home; every path below hangs off it.
 
 # openssh supplies sshd and ssh-keygen.
-# The box already has bash, tar, curl, python3 and zsh; curl is listed so
-# Zed's server download never depends on the base image. rsync works over
+# The box already has bash, tar and curl; curl is listed so Zed's server
+# download never depends on the base image. rsync works over
 # `min-zed.NAME` with xxhash, its missing runtime library. git: Zed's git
 # panel runs it in the box, and work leaves a box by push.
 packages = ["openssh", "curl", "rsync", "xxhash", "git"]
