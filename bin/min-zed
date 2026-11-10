@@ -200,10 +200,10 @@ need_box() {
 # prepared: a key dir under $STATE/sessions whose recorded id min lists under
 # the dir's name (pick_id: a box renamed outside min-zed, or another tool's
 # box of the same name, is not own). gc, orphan reminders, open's reuse,
-# destroy's cwd lookup, the pickers, completions, the ssh stanzas and the
-# ssh_connections entries use only these: other tools' boxes are theirs.
-# Fails with its jq, so a failure never passes as an empty list. Never
-# adopts: a list is no box acted on (box_id on the chosen NAME adopts).
+# new's offer, destroy's cwd lookup, the pickers, completions, the ssh
+# stanzas and the ssh_connections entries use only these: other tools' boxes
+# are theirs. Fails with its jq, so a failure never passes as an empty list.
+# Never adopts: a list is no box acted on (box_id on the chosen NAME adopts).
 # own_ls: the same from min ls.
 own_filter() {
     of_j=$(cat)
@@ -224,6 +224,13 @@ id_field() {
     if [ $# -ge 3 ]; then if_j=$3; else if_j=$(min_ls) || return 0; fi
     printf '%s' "$if_j" | jq -r --arg i "$1" --arg f "$2" '[.sessions[] | select(.id == $i)
         | if $f == "branch" then (.git.branch // empty) else (.[$f] // empty) end][0] // empty'
+}
+# live_box PATH: an own list (own_filter) on stdin; the name of its live
+# session for PATH, if any, when the name is a hostname: what open reuses and
+# new offers.
+live_box() {
+    jq -r --arg p "$1" '[.sessions[] | select(.status == "active" and .project_path == $p
+        and (.name | test("^[a-z0-9][a-z0-9-]*$"))) | .name][0] // empty'
 }
 
 # ---- keys and facts --------------------------------------------------------
@@ -962,8 +969,9 @@ usage: $TOOL <command> [args]
                           the session for PATH (default .): a live one of $TOOL's is reused, else
                           one is activated with --loadout $LOADOUT; then $EDITOR_NAME opens $WORKDIR in it
   new [PATH | --empty] [-n NAME] [--no-window]
-                          always a new session for PATH, then $EDITOR_NAME; --empty: an empty
-                          $WORKDIR (min names it box-...)
+                          a new session for PATH, then $EDITOR_NAME; on a terminal, when one of
+                          $TOOL's is live for PATH, asks to attach to it first (not with -n or
+                          --empty); --empty: an empty $WORKDIR (min names it box-...)
   attach [NAME] [--no-window]
                           an existing session in $EDITOR_NAME (no NAME: pick one of $TOOL's)
   destroy [-y] [--if-idle] [--force] [NAME]
@@ -1202,7 +1210,9 @@ connect() {
 # ---- commands --------------------------------------------------------------------
 
 # open|new [PATH] [-n NAME] [--no-window]; new --empty: an empty box on
-# $STATE/box, so min names it box-<hex>.
+# $STATE/box, so min names it box-<hex>. new without -n or --empty, on a
+# terminal, offers PATH's live box first; a second one may fail on a host
+# port the first holds.
 cmd_open() {
     PICK_NOADOPT=1   # prepare records NAME's id once its project checks out
     mode=$1; shift
@@ -1228,8 +1238,21 @@ cmd_open() {
     oj=$(min_ls) || die "min ls failed"
     if [ "$mode" = open ] && [ -z "$name" ]; then
         oo=$(printf '%s' "$oj" | own_filter) || die "min ls failed"
-        name=$(printf '%s' "$oo" | jq -r --arg p "$path" '[.sessions[] | select(.status == "active" and .project_path == $p
-            and (.name | test("^[a-z0-9][a-z0-9-]*$"))) | .name][0] // empty')
+        name=$(printf '%s' "$oo" | live_box "$path")
+    elif [ "$mode" = new ] && [ -z "$name" ] && [ -z "$empty" ] && [ -t 0 ]; then
+        oo=$(printf '%s' "$oj" | own_filter) || die "min ls failed"
+        live=$(printf '%s' "$oo" | live_box "$path")
+        if [ -n "$live" ]; then
+            # offered, so chosen for the user: only by an id min-zed recorded
+            [ "$(stored_id "$live" || :)" = "$(printf '%s' "$oo" | jq -r --arg n "$live" '[.sessions[] | select(.name == $n) | .id][0] // empty')" ] \
+                || die "$live has no recorded box id yet; attach it once so $TOOL records it, or pass -n NAME for a second box"
+            printf 'Box %s is already running for %s. Attach to it instead of making a second one? [Y/n] ' "$live" "$path" >&2
+            IFS= read -r a || a=
+            case $a in
+                [nN]*) ;;
+                *) name=$live mode=open ;;   # open: past new's "already exists" below
+            esac
+        fi
     fi
     # NAME's box: own, else the one box of that name; several (and none
     # recorded) is refused, never a third made beside them

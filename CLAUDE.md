@@ -16,7 +16,7 @@ own surfaces, which `setup` wires: the Remote Projects list
 |---|---|
 | `bin/min-zed` | tool constants, then the transport/ssh/session plumbing, then the client layer, whose first block holds every editor-specific constant |
 | plumbing | transport, box ids (`stored_id`, `pick_id`, `box_id`, `need_box`, `own_filter`, `id_field`), PREP/prepare, `stored_path`, ssh options and stanzas, `ssh-config`, `_proxy`, `ssh`, naming, `pick_session`, `activate_session`, `destroy_one`, `in_use_names`/`box_in_use`, `track_orphans`, `default_loadouts`, the ssh-config record, report helpers; editor-neutral, reaching the client layer only through its hooks |
-| client layer | `open`/`new`/`attach` (session, stanza, settings, `zed ssh://…` unless `--no-window`; `new --empty`), `destroy` (`--if-idle`; no NAME: the cwd's own box, else on a terminal the picker), `gc`, `status` (`--json`), `doctor`, `completions`, `config` (alias `zed-config`), `setup`, hidden `_sessions`; hooks `client_on_connect` and `client_on_destroy` (settings sync) |
+| client layer | `open`/`new`/`attach` (session, stanza, settings, `zed ssh://…` unless `--no-window`; `new --empty`; on a terminal `new` offers PATH's live box), `destroy` (`--if-idle`; no NAME: the cwd's own box, else on a terminal the picker), `gc`, `status` (`--json`), `doctor`, `completions`, `config` (alias `zed-config`), `setup`, hidden `_sessions`; hooks `client_on_connect` and `client_on_destroy` (settings sync) |
 | `bin/min-zed-config` | python3 merger for three JSONC files in `~/.config/zed`: `settings.json` (`ssh_connections` entries for live sessions, edited in place), `tasks.json` and `keymap.json` (a marked block at the top of the array: the Minimal tasks, the local-terminal key); `--install`, `--sync NAME...`, `--remove`, `--doctor`, `--dry-run` |
 | `loadouts/zed.toml`, `loadouts/zed/` | `openssh curl rsync xxhash git`; sshd env prep; `min:workbench` rc line; a patch copying `zed/skills/minimal-sandbox` to `~/.claude/skills` in the box. `setup` copies `zed/` beside the linked toml: `$LOADOUT_ROOT` must be a real directory |
 | `skills/`, `loadouts/zed/skills/` | Minimal's skills, vendored from gominimal/minimal-skills (MIT) at a pinned commit by `just skills`: the host ones (`setup` copies them into the Mac's `~/.agents/skills` (Zed's agent) and `~/.claude/skills`, marked `.min-zed-copy`, never over a dir with no `.min-*-copy` mark; one another min tool marked is shared, keeping its mark, and `--remove` deletes it only once no other mark is left) and `minimal-sandbox` (box only: the host ones teach commands a box lacks) |
@@ -35,7 +35,8 @@ own surfaces, which `setup` wires: the Remote Projects list
   `MIN_ZED_TASK_FOLDER: ${ZED_WORKTREE_ROOT:none}` so the task is offered
   with no folder open too; with none, or a single-file window, it asks in
   macOS's folder picker (`osascript` `choose folder`, from `$HOME`; cancel
-  exits 0); without `osascript` it prints one line saying to open a folder),
+  exits 0); without `osascript` it prints one line saying to open a folder;
+  `new` then offers the folder's live own box, `[Y/n]`, before a second one),
   `Minimal: New Empty Box` (`new --empty`), `Minimal: Open Box…` (`attach`:
   picker), `Minimal: Destroy Box…` (`destroy`: the cwd's box, else picker),
   `Minimal: Clean Up Idle Boxes…` (`gc`), `Minimal: Status`,
@@ -166,9 +167,16 @@ own surfaces, which `setup` wires: the Remote Projects list
   and `gc`/`status` date only those in `orphan/` (`track_orphans`, each run);
   boxes made by `min` alone are never listed. The same holds wherever a
   session is chosen for the user: `open`'s reuse of a live session for PATH,
-  `destroy`'s cwd lookup and its picker, the `attach` picker and `_sessions`
-  (completions). Only an explicit NAME (`attach NAME`, `ssh NAME`,
-  `destroy NAME`, `open -n NAME`) may reach another tool's box.
+  `new`'s offer of one, `destroy`'s cwd lookup and its picker, the `attach`
+  picker and `_sessions` (completions). Only an explicit NAME (`attach NAME`,
+  `ssh NAME`, `destroy NAME`, `open -n NAME`) may reach another tool's box.
+- `new` asks only on a terminal and only without `-n` or `--empty`: `[Y/n]`
+  to attach to PATH's live own session (`live_box` over `own_filter`, as
+  `open` reuses), and only an n makes the second box. Without a terminal it
+  is always a new session. A box of another tool is never offered: min's
+  refusal stands. A key dir with no recorded id is never offered: `new`
+  refuses ("NAME has no recorded box id yet; attach it once…"); on a y it
+  reaches the box by its recorded id.
 - `destroy` without NAME: exactly one own session for the cwd is it;
   otherwise, on a terminal (a Zed task), the own-session picker; without a
   terminal, or with no own session at all, the errors ("no session for DIR;

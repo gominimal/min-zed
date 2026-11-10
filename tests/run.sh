@@ -530,6 +530,137 @@ case_destroy_picker_on_a_terminal() {
     assert_log_not_contains "session destroy"
 }
 
+# On a terminal (a Zed task), new offers PATH's live own box before making a
+# second one: a second box can die on a host port the first holds.
+case_new_offers_live_box_on_a_terminal() {
+    installed
+    reset_log
+    run_tty "$AP" 'y\n' new "$AP" || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_out_contains "Box alpha is already running for $AP. Attach to it instead of making a second one? [Y/n]"
+    assert_out_contains "${HP}alpha"
+    assert_log_not_contains "session activate"
+    assert_log_contains "zed ssh://${HP}alpha/workbench"
+    assert_no_file "$STATE/created/alpha"
+    # Enter takes the default, and --no-window still means no window
+    reset_log
+    run_tty "$AP" '\n' new "$AP" --no-window
+    assert_rc 0
+    assert_log_not_contains "session activate"
+    assert_log_contains "min session exec $ID_A sh -c <script>"
+    assert_log_not_contains "zed ssh://"
+    # n: a second box, as before
+    sessions_after alpha-proj-amber "$AP"
+    reset_log
+    run_tty "$AP" 'n\n' new "$AP"
+    assert_rc 0
+    assert_out_contains "Box alpha is already running for $AP."
+    assert_log_contains "min session activate --no-prompt --loadout zed $AP"
+    assert_log_contains "zed ssh://${HP}alpha-proj-amber/workbench"
+    assert_file "$STATE/created/alpha-proj-amber"
+}
+
+# Without a terminal new stays "always a new session", for scripts and any
+# caller with its own UI.
+case_new_no_terminal_never_asks() {
+    installed
+    sessions_after alpha-proj-amber "$AP"
+    reset_log
+    run new "$AP"
+    assert_rc 0
+    assert_out_eq "${HP}alpha-proj-amber"
+    assert_log_contains "min session activate --no-prompt --loadout zed $AP"
+    assert_file_not_contains "$T/err" "already running"
+}
+
+# -n and --empty say which box: no question, even with a live own box there.
+case_new_name_and_empty_never_ask() {
+    installed
+    sessions_after mine "$AP"
+    reset_log
+    run_tty "$AP" '' new "$AP" -n mine || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_file_not_contains "$T/out" "already running"
+    assert_log_contains "min session activate --no-prompt --loadout zed -n mine $AP"
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$(id_of box-old)","name":"box-old","project_path":"$STATE/box","status":"active"}]}
+JSON
+    cat > "$FIXTURES/sessions.after.json" <<JSON
+{"sessions":[{"id":"$(id_of box-old)","name":"box-old","project_path":"$STATE/box","status":"active"},
+ {"id":"$(id_of box-amber)","name":"box-amber","project_path":"$STATE/box","status":"active"}]}
+JSON
+    own box-old
+    reset_log
+    run_tty "$AP" '' new --empty
+    assert_rc 0
+    assert_file_not_contains "$T/out" "already running"
+    assert_log_contains "min session activate --no-prompt --sync none --loadout zed $STATE/box"
+}
+
+# Only a live box of ours is offered: another tool's, or a stopped one, is not.
+case_new_offers_only_live_own_box() {
+    installed
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$ID_F","name":"foreign","project_path":"$P","status":"active"},
+ {"id":"$(id_of stopped)","name":"stopped","project_path":"$P","status":"stopped"}]}
+JSON
+    cat > "$FIXTURES/sessions.after.json" <<JSON
+{"sessions":[{"id":"$ID_F","name":"foreign","project_path":"$P","status":"active"},
+ {"id":"$(id_of stopped)","name":"stopped","project_path":"$P","status":"stopped"},
+ {"id":"$(id_of proj-amber)","name":"proj-amber","project_path":"$P","status":"active"}]}
+JSON
+    own stopped
+    reset_log
+    run_tty "$P" '' new "$P" || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_file_not_contains "$T/out" "already running"
+    assert_log_contains "min session activate --no-prompt --loadout zed $P"
+    assert_log_not_contains "min session exec $ID_F"
+    assert_log_not_contains "min session exec $(id_of stopped)"
+    # another tool's box named like one of ours (our key dir, its id) is no
+    # box of ours: not offered, and its id is not recorded
+    rm -rf "$STATE/sessions/proj-amber"
+    mkdir -p "$STATE/sessions/foreign"
+    printf '%s\n' "$ID_G" > "$STATE/sessions/foreign/id"
+    reset_log
+    run_tty "$P" '' new "$P"
+    assert_file_not_contains "$T/out" "already running"
+    assert_log_not_contains "min session exec $ID_F"
+    assert_file "$STATE/sessions/foreign/id" "$ID_G"
+}
+
+# new's offer is chosen for the user, so it goes only by a recorded id: a
+# live own key dir from before ids is refused, never offered and never
+# adopted; with its id recorded, y reaches the box by that id.
+case_new_offer_needs_recorded_id() {
+    installed
+    rm "$STATE/sessions/alpha/id"   # a key dir from before ids
+    sessions_after alpha-proj-amber "$AP"
+    reset_log
+    run_tty "$AP" 'y\n' new "$AP" || { skip "no script(1)"; return 0; }
+    assert_rc 1
+    assert_out_contains "alpha has no recorded box id yet; attach it once so $TOOL records it, or pass -n NAME for a second box"
+    assert_file_not_contains "$T/out" "already running"
+    assert_no_file "$STATE/sessions/alpha/id"
+    assert_log_not_contains "session activate"
+    assert_log_not_contains "min session exec"
+    # without a terminal there is no offer, so nothing to refuse
+    run new "$AP" --no-window
+    assert_rc 0
+    assert_out_eq "${HP}alpha-proj-amber"
+    assert_no_file "$STATE/sessions/alpha/id"
+    rm -rf "$STATE/sessions/alpha-proj-amber" "$STATE/created"
+    # recorded: y attaches by that id
+    printf '%s\n' "$ID_A" > "$STATE/sessions/alpha/id"
+    reset_log
+    run_tty "$AP" 'y\n' new "$AP" --no-window
+    assert_rc 0
+    assert_out_contains "Box alpha is already running for $AP."
+    assert_log_contains "min session exec $ID_A sh -c <script>"
+    assert_log_not_contains "min session exec alpha "
+    assert_log_not_contains "session activate"
+}
+
 orphan_sessions() {
     cat > "$FIXTURES/sessions.json" <<JSON
 {"sessions":[{"id":"aaaaaaaa-0000-4000-8000-00000000000a","name":"alpha","project_path":"$AP","status":"active"},
@@ -3051,7 +3182,8 @@ blocks_install_idempotent_remove_exact blocks_content blocks_task_runs_cli_or_sa
 blocks_folder_task_window_folder_else_picker
 blocks_refreshed_when_edited blocks_users_entry_in_our_array_kept blocks_refuse_bad_files blocks_marks_only_as_our_comments
 doctor_rows doctor_min_version
-new_empty_no_window attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
+new_empty_no_window new_offers_live_box_on_a_terminal new_no_terminal_never_asks new_name_and_empty_never_ask
+new_offers_only_live_own_box new_offer_needs_recorded_id attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
 setup_remove_stops_when_config_refuses
 loadout_rc_line_once loadout_skill_only_for_claude setup_shares_skills_with_other_tools setup_through_link
 sshconfig_install_creates_include_and_stanza sshconfig_remove_restores_original

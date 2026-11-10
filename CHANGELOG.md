@@ -70,8 +70,8 @@ key instead.
   `ssh_connections` entry, the commands. A key dir from before takes the
   id of the one box with its name on its first connect (`open`, `attach`,
   `ssh`, the connection itself), never from a list, `gc` or `destroy`:
-  `gc` lists such a dir without asking, and `destroy` with no NAME refuses
-  it; if that box is not the one min-zed made, the name alone cannot tell.
+  `gc` lists such a dir without asking, and `destroy` with no NAME and
+  `new`'s offer of the folder's running box refuse it; if that box is not the one min-zed made, the name alone cannot tell.
   When several share it, min-zed leaves them alone and `doctor` says so. A
   `min ls` that exits 0 without one session list counts as a failed one.
 
@@ -88,6 +88,13 @@ key instead.
 
 ### Fixed
 
+- `new` (and so ⌃⌥N, New Box from Folder…) no longer goes straight to a
+  second box when one of min-zed's is already running for the folder. A
+  second box could fail on a host port the first holds (`Port N is already
+  in use on this machine by box NAME`) and end the task with no window. On a
+  terminal `new` now asks `[Y/n]` to attach to the running box; `n` makes the
+  second box as before. Without a terminal, or with `-n` or `--empty`, it
+  never asks.
 - `destroy` and `gc`: a failed `min ls` after the answer no longer counts as
   the box being gone. Before, it removed the session's keys, refreshed
   settings and dropped its ssh stanza even after an `n`; now everything is

@@ -30,7 +30,7 @@ Remote Projects list, the Minimal tasks and one key.
 |---|---|---|
 | `min-zed open [PATH]` | the live min-zed session for PATH if there is one, else a new one | yes |
 | `min-zed open PATH -n NAME` | NAME if it exists (for PATH), else a new one named NAME | yes |
-| `min-zed new [PATH]` | always a new one | yes |
+| `min-zed new [PATH]` | a new one; on a terminal, with a live min-zed session for PATH, asks `[Y/n]` to attach to it instead | yes |
 | `min-zed new --empty` | a new one with an empty `/workbench` | yes |
 | `min-zed attach [NAME]` | an existing one (no NAME: a numbered picker) | yes |
 
@@ -97,7 +97,7 @@ cannot list them otherwise):
 
 | Task | Runs | Notes |
 |---|---|---|
-| Minimal: New Box from Folder… | `min-zed new FOLDER` | the window's folder; with none open, asks in the macOS folder picker |
+| Minimal: New Box from Folder… | `min-zed new FOLDER` | the window's folder; with none open, asks in the macOS folder picker. Asks `[Y/n]` to attach when a box is already running for the folder |
 | Minimal: New Empty Box | `min-zed new --empty` | |
 | Minimal: Open Box… | `min-zed attach` | numbered picker |
 | Minimal: Destroy Box… | `min-zed destroy` | the folder's box, else a picker; asks `[y/N]` |
