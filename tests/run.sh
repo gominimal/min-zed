@@ -2078,6 +2078,53 @@ case_prep_claude_executable_only_with_claude() {
     [ "$(grep '^CLAUDE_CODE_EXECUTABLE=' "$T/box/.ssh/environment")" = CLAUDE_CODE_EXECUTABLE=/opt/mine ] || fail "env: $(cat "$T/box/.ssh/environment")"
 }
 
+# The box's env (coreutils 9.12) shell-quotes values (X='a b'), which sshd
+# would read literally: both writers dump awk's ENVIRON instead, filtered as
+# before, and fall back to env only without awk. quoting_env DIR: a stub env
+# that prints like coreutils 9.12, plus a FROM_ENV line.
+quoting_env() {
+    mkdir -p "$1"
+    cat > "$1/env" <<'SH'
+#!/bin/sh
+printf '%s\n' "SPACED='a b'" "QUOTE=\"it's\"" "MINIMAL_MOTD='[ -t 1 ] && echo hi'" FROM_ENV=1
+SH
+    chmod +x "$1/env"
+}
+assert_env_raw() {
+    e=$T/box/.ssh/environment
+    assert_line_in "$(cat "$e")" "SPACED=a b"
+    assert_line_in "$(cat "$e")" "QUOTE=it's"
+    ! grep -q "^FROM_ENV=" "$e" || fail "env used with awk on PATH: $(cat "$e")"
+    ! grep -q "^MINIMAL_MOTD=" "$e" || fail "MINIMAL_MOTD not filtered: $(cat "$e")"
+}
+case_prep_environment_unquoted() {
+    quoting_env "$T/qenv"
+    PATH=$T/qenv:$PATH SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' run_prep "$T/p1" \
+        || fail "PREP failed: $(cat "$T/p1.err")"
+    assert_env_raw
+}
+case_loadout_environment_unquoted() {
+    quoting_env "$T/qenv"; mkdir -p "$T/box"
+    PATH=$T/qenv:$PATH HOME=$T/box SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' \
+        sh -c "$(loadout_hook 0)" < /dev/null
+    assert_env_raw
+}
+# Without awk on PATH both writers use env (the stub's FROM_ENV line).
+case_environment_falls_back_to_env_without_awk() {
+    quoting_env "$T/noawk"
+    for t in sh mkdir rm rmdir find sleep mv grep cut id cat; do
+        p=$(command -v "$t") || fail "no $t"; ln -s "$p" "$T/noawk/$t"
+    done
+    ln -s "$T/bin/ssh-keygen" "$T/noawk/ssh-keygen"
+    prep=$(prep_script); hook=$(loadout_hook 0)   # both cut out with sed/awk
+    PATH=$T/noawk HOME=$T/box sh -c "$prep" "$TOOL" "ssh-ed25519 AAAAUSER user" > "$T/p1" 2> "$T/p1.err" < /dev/null \
+        || fail "PREP failed: $(cat "$T/p1.err")"
+    assert_line_in "$(cat "$T/box/.ssh/environment")" "FROM_ENV=1"
+    rm "$T/box/.ssh/environment"
+    PATH=$T/noawk HOME=$T/box sh -c "$hook" < /dev/null
+    assert_line_in "$(cat "$T/box/.ssh/environment")" "FROM_ENV=1"
+}
+
 case_prep_waiter_keeps_lock_it_does_not_own() {
     mkdir -p "$T/box/$BOXD/.keygen"
     MIN_KEYGEN_WAIT=2 run_prep "$T/p1"
@@ -2398,7 +2445,7 @@ proxy_prepares_then_execs_sshd proxy_never_touches_settings_or_editor proxy_fail
 proxy_missing_takes_no_host proxy_log_capped_and_private
 proxy_prepare_write_failure prepare_writes_atomically prepare_rejects_bad_facts prepare_accepts_valid_facts
 prepare_errors_strip_control_bytes stored_user_checked_on_read proxy_rechecks_stored_paths
-prep_extracts_and_prints_facts prep_claude_executable_only_with_claude
+prep_extracts_and_prints_facts prep_claude_executable_only_with_claude prep_environment_unquoted loadout_environment_unquoted environment_falls_back_to_env_without_awk
 prep_waiter_keeps_lock_it_does_not_own prep_breaks_stale_lock prep_concurrent_runs_agree_on_host_key
 prep_regenerates_half_pair prep_keygen_failure_releases_lock prep_stale_lock_stress
 open_default_loadouts_toml_forms sshconfig_lock_held_waits_then_fails

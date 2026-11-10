@@ -208,6 +208,9 @@ own surfaces, which `setup` wires: the Remote Projects list
   project brings them; these loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`/`MINIMAL_MOTD`) and sshd runs with `PermitUserEnvironment=yes`.
+- The box's `env` (GNU coreutils 9.12) shell-quotes values (`X='a b'`), which
+  sshd would read literally: PREP and the loadout hook dump the environment
+  with awk's `ENVIRON` (`env` only without awk).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-zed/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass
