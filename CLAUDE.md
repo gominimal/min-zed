@@ -204,7 +204,8 @@ own surfaces, which `setup` wires: the Remote Projects list
   Unverified: that the variable reaches the agent process, and that the SDK
   runs the wrapper.
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl, python3, zsh; `sshd` at `/usr/sbin/sshd`.
+  curl; `sshd` at `/usr/sbin/sshd`. No python3 or zsh unless a loadout or the
+  project brings them; these loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`/`MINIMAL_MOTD`) and sshd runs with `PermitUserEnvironment=yes`.
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-zed/`.
