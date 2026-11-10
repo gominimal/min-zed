@@ -69,9 +69,10 @@ key instead.
   connects. The name stays the handle: `min-zed.NAME`, the
   `ssh_connections` entry, the commands. A key dir from before takes the
   id of the one box with its name on its first connect (`open`, `attach`,
-  `ssh`, the connection itself), never from a list, `gc` or `destroy`:
-  `gc` lists such a dir without asking, and `destroy` with no NAME and
-  `new`'s offer of the folder's running box refuse it; if that box is not the one min-zed made, the name alone cannot tell.
+  `ssh`, a y to `new`'s offer of the folder's running box, the connection
+  itself), never from a list, `gc` or `destroy`: `gc` lists such a dir
+  without asking, and `destroy` with no NAME refuses it; if that box is not
+  the one min-zed made, the name alone cannot tell.
   When several share it, min-zed leaves them alone and `doctor` says so. A
   `min ls` that exits 0 without one session list counts as a failed one.
 

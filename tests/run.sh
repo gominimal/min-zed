@@ -629,35 +629,61 @@ JSON
     assert_file "$STATE/sessions/foreign/id" "$ID_G"
 }
 
-# new's offer is chosen for the user, so it goes only by a recorded id: a
-# live own key dir from before ids is refused, never offered and never
-# adopted; with its id recorded, y reaches the box by that id.
-case_new_offer_needs_recorded_id() {
+# new's offer adopts a key dir from before ids as open's reuse does: y
+# records the box's id and reaches it by that id; n and no terminal write no
+# id for it.
+case_new_offer_adopts_like_open() {
     installed
     rm "$STATE/sessions/alpha/id"   # a key dir from before ids
     sessions_after alpha-proj-amber "$AP"
+    # n: a second box, alpha's id still unrecorded
     reset_log
-    run_tty "$AP" 'y\n' new "$AP" || { skip "no script(1)"; return 0; }
-    assert_rc 1
-    assert_out_contains "alpha has no recorded box id yet; attach it once so $TOOL records it, or pass -n NAME for a second box"
-    assert_file_not_contains "$T/out" "already running"
+    run_tty "$AP" 'n\n' new "$AP" --no-window || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_out_contains "Box alpha is already running for $AP."
+    assert_log_contains "min session activate --no-prompt --loadout zed $AP"
+    assert_log_not_contains "min session exec $ID_A"
     assert_no_file "$STATE/sessions/alpha/id"
-    assert_log_not_contains "session activate"
-    assert_log_not_contains "min session exec"
-    # without a terminal there is no offer, so nothing to refuse
+    rm -rf "$STATE/sessions/alpha-proj-amber" "$STATE/created"
+    # without a terminal there is no offer: no id for alpha either
+    default_fixtures; sessions_after alpha-proj-amber "$AP"
+    reset_log
     run new "$AP" --no-window
     assert_rc 0
     assert_out_eq "${HP}alpha-proj-amber"
     assert_no_file "$STATE/sessions/alpha/id"
     rm -rf "$STATE/sessions/alpha-proj-amber" "$STATE/created"
-    # recorded: y attaches by that id
-    printf '%s\n' "$ID_A" > "$STATE/sessions/alpha/id"
+    # y: adopted, by its id
+    default_fixtures
     reset_log
     run_tty "$AP" 'y\n' new "$AP" --no-window
     assert_rc 0
     assert_out_contains "Box alpha is already running for $AP."
+    assert_out_contains "${HP}alpha"
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
     assert_log_contains "min session exec $ID_A sh -c <script>"
     assert_log_not_contains "min session exec alpha "
+    assert_log_not_contains "session activate"
+}
+
+# two live own boxes for PATH, one from before ids: the first is offered,
+# and y reaches it by id; the other keeps its own record
+case_new_offer_two_live_own_boxes() {
+    installed
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$ID_A","name":"alpha","project_path":"$AP","status":"active"},
+ {"id":"$ID_B","name":"beta","project_path":"$AP","status":"active"}]}
+JSON
+    rm "$STATE/sessions/alpha/id"
+    own beta
+    reset_log
+    run_tty "$AP" 'y\n' new "$AP" --no-window || { skip "no script(1)"; return 0; }
+    assert_rc 0
+    assert_out_contains "Box alpha is already running for $AP."
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    assert_file "$STATE/sessions/beta/id" "$ID_B"
+    assert_log_contains "min session exec $ID_A sh -c <script>"
+    assert_log_not_contains "min session exec $ID_B"
     assert_log_not_contains "session activate"
 }
 
@@ -3183,7 +3209,7 @@ blocks_folder_task_window_folder_else_picker
 blocks_refreshed_when_edited blocks_users_entry_in_our_array_kept blocks_refuse_bad_files blocks_marks_only_as_our_comments
 doctor_rows doctor_min_version
 new_empty_no_window new_offers_live_box_on_a_terminal new_no_terminal_never_asks new_name_and_empty_never_ask
-new_offers_only_live_own_box new_offer_needs_recorded_id attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
+new_offers_only_live_own_box new_offer_adopts_like_open new_offer_two_live_own_boxes attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
 setup_remove_stops_when_config_refuses
 loadout_rc_line_once loadout_skill_only_for_claude setup_shares_skills_with_other_tools setup_through_link
 sshconfig_install_creates_include_and_stanza sshconfig_remove_restores_original

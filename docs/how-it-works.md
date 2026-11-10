@@ -79,15 +79,15 @@ Own means: a key dir whose recorded id `min ls` lists under the dir's name
 is not own). A key dir from before ids is adopted, its id written, when
 exactly one box has its name, and only by a connect to that box: `attach`,
 `ssh`, `_proxy`, or `open` once the project checks out (given, or chosen
-in a picker). `destroy` never writes an id: `destroy NAME` reaches the one
-box of that name by its id without recording it, and with no NAME (the
-current directory, the picker) it refuses a dir with no recorded id ("NAME
-has no recorded box id yet; attach it once…"); so does `new` when the
-folder's running box it would offer has none. Lists never adopt: the own
-list (`own_filter`) behind open's reuse, new's offer, the pickers,
-`destroy`'s cwd lookup, `gc`, `status`, completions, the stanzas and the
-Remote Projects entries counts it own without writing, so a command on one box never
-adopts another's; nor do `ssh-config`, `config`, `setup` (with their
+in a picker), and so `new` on a y to its offer of the folder's running
+box. `destroy` never writes an id: `destroy NAME` reaches the one box of
+that name by its id without recording it, and with no NAME (the current
+directory, the picker) it refuses a dir with no recorded id ("NAME has no
+recorded box id yet; attach it once…"). Lists never adopt: the own list
+(`own_filter`) behind open's reuse, new's offer, the pickers, `destroy`'s
+cwd lookup, `gc`, `status`, completions, the stanzas and the Remote
+Projects entries counts it own without writing, so a command on one box
+never adopts another's; nor do `ssh-config`, `config`, `setup` (with their
 flags) or `doctor` (which says it will be adopted). `gc` never adopts or
 destroys such a dir: it lists it as "no id recorded (attach NAME once)"
 and does not ask. With several boxes of its name, none is own, no stanza

@@ -1243,9 +1243,8 @@ cmd_open() {
         oo=$(printf '%s' "$oj" | own_filter) || die "min ls failed"
         live=$(printf '%s' "$oo" | live_box "$path")
         if [ -n "$live" ]; then
-            # offered, so chosen for the user: only by an id min-zed recorded
-            [ "$(stored_id "$live" || :)" = "$(printf '%s' "$oo" | jq -r --arg n "$live" '[.sessions[] | select(.name == $n) | .id][0] // empty')" ] \
-                || die "$live has no recorded box id yet; attach it once so $TOOL records it, or pass -n NAME for a second box"
+            # own (own_filter, never adopting); a y adopts a key dir from
+            # before ids as open's reuse does: prepare records the id
             printf 'Box %s is already running for %s. Attach to it instead of making a second one? [Y/n] ' "$live" "$path" >&2
             IFS= read -r a || a=
             case $a in

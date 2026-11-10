@@ -174,9 +174,9 @@ own surfaces, which `setup` wires: the Remote Projects list
   to attach to PATH's live own session (`live_box` over `own_filter`, as
   `open` reuses), and only an n makes the second box. Without a terminal it
   is always a new session. A box of another tool is never offered: min's
-  refusal stands. A key dir with no recorded id is never offered: `new`
-  refuses ("NAME has no recorded box id yet; attach it once…"); on a y it
-  reaches the box by its recorded id.
+  refusal stands. On a y it reaches the box by id: a key dir with no
+  recorded id is adopted as `open`'s reuse adopts (prepare records it);
+  an n, or no terminal, writes no id for it.
 - `destroy` without NAME: exactly one own session for the cwd is it;
   otherwise, on a terminal (a Zed task), the own-session picker; without a
   terminal, or with no own session at all, the errors ("no session for DIR;
