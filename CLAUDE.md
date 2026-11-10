@@ -204,8 +204,9 @@ own surfaces, which `setup` wires: the Remote Projects list
   Unverified: that the variable reaches the agent process, and that the SDK
   runs the wrapper.
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl; `sshd` at `/usr/sbin/sshd`. No python3 or zsh unless a loadout or the
-  project brings them; these loadouts need neither.
+  curl and awk (GNU Awk 5.4.1; seen 2026-11-10); `sshd` at `/usr/sbin/sshd`.
+  No python3 or zsh unless a loadout or the project brings them; these
+  loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`/`MINIMAL_MOTD`) and sshd runs with `PermitUserEnvironment=yes`.
 - The box's `env` (GNU coreutils 9.12) shell-quotes values (`X='a b'`), which
@@ -234,7 +235,6 @@ own surfaces, which `setup` wires: the Remote Projects list
 - New Box from Folder… with no folder open: the osascript folder picker
   (may open behind Zed's window).
 - Destroying the box a window is on: what that window does.
-- The box has an `awk` (else both writers fall back to the quoting `env`).
 
 Seen end to end (Zed 1.26.2, 2026-10-29): the tasks through `sh`, the
 folder through `env`, `hide: on_success`, pickers and y/N in a task
