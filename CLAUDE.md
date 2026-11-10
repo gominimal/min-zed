@@ -269,9 +269,16 @@ own surfaces, which `setup` wires: the Remote Projects list
   Unverified: that the variable reaches the agent process, and that the SDK
   runs the wrapper.
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl, python3, zsh; `sshd` at `/usr/sbin/sshd`.
+  curl and awk (GNU Awk 5.4.1; seen 2026-11-10); `sshd` at `/usr/sbin/sshd`.
+  No python3 or zsh unless a loadout or the project brings them; these
+  loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`/`MINIMAL_MOTD`) and sshd runs with `PermitUserEnvironment=yes`.
+- The box's `env` (GNU coreutils 9.12) shell-quotes values (`X='a b'`), which
+  sshd would read literally: PREP and the loadout hook dump the environment
+  with awk's `ENVIRON` (`env` only without awk), dropping multi-line values
+  whole. gawk adds `AWKPATH`/`AWKLIBPATH` to `ENVIRON` when unset; they pass
+  the filters (filtering them would drop a user's own).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-zed/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass

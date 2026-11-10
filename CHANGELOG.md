@@ -89,6 +89,13 @@ key instead.
 
 ### Fixed
 
+- Values in the box's sshd environment no longer arrive shell-quoted. The
+  box's `env` (GNU coreutils 9.12) quotes values when it prints them
+  (`X='a b'`), and sshd read `~/.ssh/environment` literally, so any loadout
+  or project variable with spaces or quotes reached ssh shells, Zed's
+  terminals and its agent with the quotes in it. PREP and the loadout hook
+  now write the environment from awk's `ENVIRON`, dropping multi-line
+  values whole (`env`, quotes and all, only when the box has no awk).
 - `new` (and so ⌃⌥N, New Box from Folder…) no longer goes straight to a
   second box when one of min-zed's is already running for the folder. A
   second box could fail on a host port the first holds (`Port N is already
