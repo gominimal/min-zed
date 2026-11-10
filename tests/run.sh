@@ -2096,16 +2096,21 @@ assert_env_raw() {
     assert_line_in "$(cat "$e")" "QUOTE=it's"
     ! grep -q "^FROM_ENV=" "$e" || fail "env used with awk on PATH: $(cat "$e")"
     ! grep -q "^MINIMAL_MOTD=" "$e" || fail "MINIMAL_MOTD not filtered: $(cat "$e")"
+    ! grep -q "^MULTI=" "$e" || fail "multi-line value kept: $(cat "$e")"
+    ! grep -q "^INJECTED=" "$e" || fail "second line of a value written as a variable: $(cat "$e")"
 }
+# A multi-line value whose second line looks like NAME=value is dropped whole.
+MULTI='a
+INJECTED=yes'
 case_prep_environment_unquoted() {
     quoting_env "$T/qenv"
-    PATH=$T/qenv:$PATH SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' run_prep "$T/p1" \
+    PATH=$T/qenv:$PATH SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' MULTI="$MULTI" run_prep "$T/p1" \
         || fail "PREP failed: $(cat "$T/p1.err")"
     assert_env_raw
 }
 case_loadout_environment_unquoted() {
     quoting_env "$T/qenv"; mkdir -p "$T/box"
-    PATH=$T/qenv:$PATH HOME=$T/box SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' \
+    PATH=$T/qenv:$PATH HOME=$T/box SPACED="a b" QUOTE="it's" MINIMAL_MOTD='[ -t 1 ] && echo hi' MULTI="$MULTI" \
         sh -c "$(loadout_hook 0)" < /dev/null
     assert_env_raw
 }

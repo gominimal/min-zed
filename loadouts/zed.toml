@@ -36,7 +36,8 @@ patches = [
 # sshd scrubs the environment, so the sshd min-zed runs has
 # PermitUserEnvironment=yes and reads ~/.ssh/environment, written here from
 # awk's ENVIRON (the box's `env`, coreutils 9.12, shell-quotes values; `env`
-# only without awk) and filtered exactly as PREP filters it
+# only without awk; a multi-line value is dropped whole) and filtered
+# exactly as PREP filters it
 # (PROMPT_COMMAND/MINIMAL_MOTD are minimald's attach banner and break an
 # ssh-started bash), plus, as PREP does,
 # CLAUDE_CODE_EXECUTABLE=/usr/bin/claude when the box has Minimal's claude
@@ -54,7 +55,7 @@ on_activate.type = "inline"
 on_activate.value = '''
 umask 077
 mkdir -p "$HOME/.ssh" </dev/null || true
-if command -v awk >/dev/null 2>&1; then awk "BEGIN { for (k in ENVIRON) print k \"=\" ENVIRON[k] }"; else env; fi </dev/null | grep -E "^[A-Za-z_][A-Za-z0-9_]*=" | grep -Ev "^(TERM|PWD|OLDPWD|SHLVL|_|HOME|USER|LOGNAME|PATH|SSH_[A-Z_]*|PROMPT_COMMAND|MINIMAL_MOTD)=" > "$HOME/.ssh/environment" || true
+if command -v awk >/dev/null 2>&1; then awk "BEGIN { for (k in ENVIRON) if (index(ENVIRON[k], \"\n\") == 0) print k \"=\" ENVIRON[k] }"; else env; fi </dev/null | grep -E "^[A-Za-z_][A-Za-z0-9_]*=" | grep -Ev "^(TERM|PWD|OLDPWD|SHLVL|_|HOME|USER|LOGNAME|PATH|SSH_[A-Z_]*|PROMPT_COMMAND|MINIMAL_MOTD)=" > "$HOME/.ssh/environment" || true
 if [ -x /usr/bin/claude ] && [ -z "${CLAUDE_CODE_EXECUTABLE:-}" ]; then echo "CLAUDE_CODE_EXECUTABLE=/usr/bin/claude" >> "$HOME/.ssh/environment" || true; fi
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
   if ! grep -qs "min:workbench" "$rc" </dev/null; then

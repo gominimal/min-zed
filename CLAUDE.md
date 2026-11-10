@@ -210,7 +210,9 @@ own surfaces, which `setup` wires: the Remote Projects list
   `PROMPT_COMMAND`/`MINIMAL_MOTD`) and sshd runs with `PermitUserEnvironment=yes`.
 - The box's `env` (GNU coreutils 9.12) shell-quotes values (`X='a b'`), which
   sshd would read literally: PREP and the loadout hook dump the environment
-  with awk's `ENVIRON` (`env` only without awk).
+  with awk's `ENVIRON` (`env` only without awk), dropping multi-line values
+  whole. gawk adds `AWKPATH`/`AWKLIBPATH` to `ENVIRON` when unset; they pass
+  the filters (filtering them would drop a user's own).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-zed/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass
@@ -232,6 +234,7 @@ own surfaces, which `setup` wires: the Remote Projects list
 - New Box from Folder… with no folder open: the osascript folder picker
   (may open behind Zed's window).
 - Destroying the box a window is on: what that window does.
+- The box has an `awk` (else both writers fall back to the quoting `env`).
 
 Seen end to end (Zed 1.26.2, 2026-10-29): the tasks through `sh`, the
 folder through `env`, `hide: on_success`, pickers and y/N in a task
