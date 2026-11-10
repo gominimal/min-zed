@@ -632,6 +632,21 @@ JSON
 # new's offer adopts a key dir from before ids as open's reuse does: y
 # records the box's id and reaches it by that id; n and no terminal write no
 # id for it.
+# A connect that fails in prepare adopts nothing: the id is written only once
+# prepare succeeds, for new's y and open's reuse alike.
+case_new_offer_prepare_fails_no_adopt() {
+    installed
+    rm "$STATE/sessions/alpha/id"   # a key dir from before ids
+    printf 'user=box\nhome=/home\nsshd=/usr/sbin/sshd\nhostkey=bad key\n' > "$FIXTURES/facts.txt"
+    reset_log
+    run_tty "$AP" 'y\n' new "$AP" --no-window || { skip "no script(1)"; return 0; }
+    assert_no_file "$STATE/sessions/alpha/id"
+    reset_log
+    run open "$AP" --no-window
+    assert_rc 1
+    assert_no_file "$STATE/sessions/alpha/id"
+}
+
 case_new_offer_adopts_like_open() {
     installed
     rm "$STATE/sessions/alpha/id"   # a key dir from before ids
@@ -3209,7 +3224,7 @@ blocks_folder_task_window_folder_else_picker
 blocks_refreshed_when_edited blocks_users_entry_in_our_array_kept blocks_refuse_bad_files blocks_marks_only_as_our_comments
 doctor_rows doctor_min_version
 new_empty_no_window new_offers_live_box_on_a_terminal new_no_terminal_never_asks new_name_and_empty_never_ask
-new_offers_only_live_own_box new_offer_adopts_like_open new_offer_two_live_own_boxes attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
+new_offers_only_live_own_box new_offer_adopts_like_open new_offer_prepare_fails_no_adopt new_offer_two_live_own_boxes attach_no_window destroy_if_idle destroy_unsaved_needs_force status_json setup_installs_follows_and_removes
 setup_remove_stops_when_config_refuses
 loadout_rc_line_once loadout_skill_only_for_claude setup_shares_skills_with_other_tools setup_through_link
 sshconfig_install_creates_include_and_stanza sshconfig_remove_restores_original
