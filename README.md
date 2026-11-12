@@ -54,7 +54,7 @@ brew install jq just
 ### 2. Install
 
 ```sh
-git clone https://github.com/norrietaylor/zed.git min-zed && cd min-zed
+git clone https://github.com/gominimal/min-zed.git min-zed && cd min-zed
 just install
 min-zed doctor
 ```
