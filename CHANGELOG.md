@@ -162,4 +162,4 @@ First release, split from [minx](https://github.com/noric-labs/minx).
   min-<client> tool (`~/.local/state/min-clients/ssh-config-created`); the
   tool removing the last Include deletes it.
 
-[0.1.0]: https://github.com/norrietaylor/zed/releases/tag/v0.1.0
+[0.1.0]: https://github.com/gominimal/min-zed/releases/tag/v0.1.0

@@ -4,7 +4,7 @@
 remote projects (`zed ssh://min-zed.NAME/workbench`), with sshd running inside
 the box behind a `min session exec` ProxyCommand. One POSIX shell script plus
 a python3 merger, no build step. It is the Zed twin of min-vscode
-([norrietaylor/vscode](https://github.com/norrietaylor/vscode)): same plumbing
+([gominimal/min-vscode](https://github.com/gominimal/min-vscode)): same plumbing
 and commands; only the editor-specific constants, the merger and the loadout
 differ. There is no Zed extension (Zed's WASM API has no UI): the UI is Zed's
 own surfaces, which `setup` wires: the Remote Projects list
